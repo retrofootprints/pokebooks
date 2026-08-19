@@ -1,0 +1,12 @@
+# Raw BNP dumps, intermediate build artifacts, local test scripts/logs —
+# everything needed to regenerate this lives in scripts/, not the repo.
+data/
+
+# Safety net in case a raw dump ever lands outside data/
+*.zip
+
+__pycache__/
+*.pyc
+
+# The published, chunked catalogue (db/) IS committed — it's the Phase 1
+# build artifact GitHub Pages serves. Do not add db/ here.

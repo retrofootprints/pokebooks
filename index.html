@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="pt">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Encontros de Livros</title>
+<meta name="description" content="Log encounters with physical books in Portugal.">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="app-header">
+  <div>
+    <h1>Encontros de Livros</h1>
+    <div class="subtitle">book encounter log — pilot</div>
+  </div>
+</header>
+
+<main>
+
+  <!-- ===================== CAPTURE VIEW ===================== -->
+  <section id="view-capture" class="view active">
+
+    <div class="camera-wrap hidden" id="camera-wrap">
+      <video id="camera-video" autoplay playsinline muted></video>
+      <canvas id="camera-canvas" class="hidden"></canvas>
+    </div>
+    <div class="status-line" id="capture-status"></div>
+    <div class="camera-controls hidden" id="camera-controls">
+      <button class="btn primary" id="btn-shutter">Capture photo</button>
+      <button class="btn" id="btn-cancel-camera">Cancel</button>
+    </div>
+
+    <div class="capture-grid" id="capture-grid">
+      <button class="big-button primary" id="btn-scan-barcode">
+        <span class="icon">▮▯▮</span>
+        <span>Scan barcode</span>
+      </button>
+      <button class="big-button" id="btn-photograph-page">
+        <span class="icon">📄</span>
+        <span>Photograph page</span>
+      </button>
+    </div>
+
+    <div class="search-row">
+      <input type="text" id="search-input" placeholder="Search title or author…">
+      <button class="btn" id="btn-search">Search</button>
+    </div>
+
+    <button class="log-anyway" id="btn-log-anyway">Log it anyway — no identification needed</button>
+
+    <div id="search-results"></div>
+  </section>
+
+  <!-- ===================== RESULT VIEW ===================== -->
+  <section id="view-result" class="view">
+    <div class="card" id="result-card"></div>
+  </section>
+
+  <!-- ===================== MANUAL / RUNG 5 FORM ===================== -->
+  <section id="view-manual" class="view">
+    <h2 id="manual-heading">Log this encounter</h2>
+    <form class="manual-form" id="manual-form">
+      <img id="manual-photo-preview" class="result-photo hidden">
+
+      <label for="m-title">Title</label>
+      <input type="text" id="m-title" name="title">
+
+      <label for="m-author">Author</label>
+      <input type="text" id="m-author" name="author">
+
+      <label for="m-publisher">Publisher</label>
+      <input type="text" id="m-publisher" name="publisher">
+
+      <label for="m-year">Year</label>
+      <input type="text" id="m-year" name="year" inputmode="numeric">
+
+      <label>Context</label>
+      <div class="chip-row" id="context-chips">
+        <span class="chip" data-value="shop">shop</span>
+        <span class="chip" data-value="library">library</span>
+        <span class="chip" data-value="friend">friend</span>
+        <span class="chip" data-value="fair">fair</span>
+        <span class="chip" data-value="secondhand">secondhand</span>
+        <span class="chip" data-value="owned">owned</span>
+        <span class="chip" data-value="other">other</span>
+      </div>
+
+      <label for="m-location-note">Location note (optional)</label>
+      <input type="text" id="m-location-note" placeholder="e.g. Alfarrabista da Rua Anchieta">
+
+      <label for="m-note">Personal note (optional)</label>
+      <textarea id="m-note"></textarea>
+
+      <div class="action-row">
+        <button type="button" class="btn" id="btn-manual-cancel">Cancel</button>
+        <button type="submit" class="btn primary" id="btn-manual-save">Save encounter</button>
+      </div>
+    </form>
+  </section>
+
+  <!-- ===================== LOG VIEW ===================== -->
+  <section id="view-log" class="view">
+    <h2>Log</h2>
+    <div class="log-filters" id="log-filters">
+      <span class="chip selected" data-rung="all">all</span>
+      <span class="chip" data-rung="1">rung 1</span>
+      <span class="chip" data-rung="2">rung 2</span>
+      <span class="chip" data-rung="3">rung 3</span>
+      <span class="chip" data-rung="4">rung 4</span>
+      <span class="chip" data-rung="5">rung 5</span>
+    </div>
+    <div id="log-list"></div>
+  </section>
+
+  <!-- ===================== STATS VIEW ===================== -->
+  <section id="view-stats" class="view">
+    <h2>Stats</h2>
+    <div class="stat-grid" id="stat-tiles"></div>
+    <h3>Rung distribution</h3>
+    <div id="rung-bars"></div>
+    <h3>By context</h3>
+    <div id="context-bars"></div>
+    <div class="action-row">
+      <button class="btn" id="btn-export">Export JSON</button>
+      <button class="btn" id="btn-import">Import JSON</button>
+      <input type="file" id="import-file" accept="application/json" class="hidden">
+    </div>
+  </section>
+
+</main>
+
+<div class="toast" id="toast"></div>
+
+<nav class="bottom-nav">
+  <button class="nav-btn active" data-view="capture"><span class="icon">＋</span><span>Capture</span></button>
+  <button class="nav-btn" data-view="log"><span class="icon">☰</span><span>Log</span></button>
+  <button class="nav-btn" data-view="stats"><span class="icon">▤</span><span>Stats</span></button>
+</nav>
+
+<!-- Vendored third-party libs (see /lib and README.md) -->
+<script src="lib/sqljs-httpvfs/sqljs-httpvfs.js"></script>
+<script src="lib/zxing/zxing-reader.js"></script>
+<script src="lib/tesseract/tesseract.min.js"></script>
+
+<!-- App code -->
+<script src="js/util.js"></script>
+<script src="js/idb.js"></script>
+<script src="js/catalogue.js"></script>
+<script src="js/network.js"></script>
+<script src="js/geo.js"></script>
+<script src="js/capture.js"></script>
+<script src="js/barcode.js"></script>
+<script src="js/ocr.js"></script>
+<script src="js/ladder.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

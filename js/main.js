@@ -99,7 +99,13 @@
     setStatus("Reading text (this can take a few seconds)…");
     App.ui.showView("capture"); // stay put but show progress via status line
     try {
-      const draft = await App.ladder.resolveFromPhoto(storedBlob, ocrBlob);
+      const draft = await App.ladder.resolveFromPhoto(storedBlob, ocrBlob, (deg, i, total) => {
+        setStatus(
+          i === 0
+            ? "Reading text (this can take a few seconds)…"
+            : `Reading text — that angle didn't work, trying another orientation (${i + 1}/${total})…`
+        );
+      });
       currentDraft = draft;
       setStatus("");
       App.ui.renderResult(draft);

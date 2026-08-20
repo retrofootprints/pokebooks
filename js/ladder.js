@@ -66,18 +66,22 @@ App.ladder = (function () {
   // for resolving small printed text, so feeding OCR the same lossy copy
   // was starving it of the resolution it needs. Falls back to photoBlob if
   // no separate capture was provided (e.g. resuming an older draft shape).
-  async function resolveFromPhoto(photoBlob, ocrBlob) {
+  //
+  // OCR runs via recognizeBestRotation, not a single fixed-orientation pass
+  // — see the comment on that function in ocr.js for why a single
+  // assumed orientation isn't safe to rely on. onAttempt, if given, is
+  // forwarded so the caller can show progress across the (up to 4) passes.
+  async function resolveFromPhoto(photoBlob, ocrBlob, onAttempt) {
     const draft = blankDraft();
     draft.photo_blob = photoBlob;
 
-    const text = await App.ocr.recognize(ocrBlob || photoBlob);
-    draft.raw_ocr_text = text;
+    const result = await App.ocr.recognizeBestRotation(ocrBlob || photoBlob, onAttempt);
+    draft.raw_ocr_text = result.text;
 
-    const isbnMatch = App.util.extractIsbnFromText(text);
-    if (isbnMatch) {
+    if (result.isbn) {
       draft.resolution_rung = 2;
-      draft.detected_isbn = isbnMatch.isbn13;
-      const edition = await resolveIsbn(isbnMatch.isbn13, isbnMatch.isbn10);
+      draft.detected_isbn = result.isbn.isbn13;
+      const edition = await resolveIsbn(result.isbn.isbn13, result.isbn.isbn10);
       if (edition) {
         draft.edition = edition;
         draft.source = edition.source;
@@ -85,11 +89,10 @@ App.ladder = (function () {
       return draft;
     }
 
-    const dl = App.util.extractDLFromText(text);
-    if (dl) {
+    if (result.dl) {
       draft.resolution_rung = 3;
-      draft.detected_dl = dl;
-      const edition = await resolveDL(dl);
+      draft.detected_dl = result.dl;
+      const edition = await resolveDL(result.dl);
       if (edition) {
         draft.edition = edition;
         draft.source = edition.source;
@@ -101,7 +104,7 @@ App.ladder = (function () {
     // (local fuzzy match was dropped — see catalogue.js). Ranked
     // candidates only, never a single accepted answer.
     draft.resolution_rung = 4;
-    const candidates = await App.network.searchByText(text).catch(() => []);
+    const candidates = await App.network.searchByText(result.text).catch(() => []);
     draft.candidates = candidates;
     return draft;
   }

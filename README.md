@@ -121,20 +121,53 @@ Map data © [Natural Earth](https://www.naturalearthdata.com/), public domain.
 `data/` (raw dumps, intermediate builds, local test scripts) is gitignored
 and never committed — see `.gitignore`.
 
+## Why OCR tries four rotations, not one
+
+`js/ocr.js`'s `recognizeBestRotation` runs OCR at 0/90/180/270 degrees and
+keeps whichever produced a valid ISBN or Depósito Legal match, short-
+circuiting as soon as one does (in practice this is 1-2 attempts, not 4).
+This exists because a canvas capture of a live `<video>` element is **not**
+guaranteed to match what the on-screen preview looks like — a documented
+cross-browser `getUserMedia`+canvas inconsistency, most notably on
+iOS/WebKit. The preview can look correctly oriented to the user while the
+captured frame is sideways. Verified against three real Portuguese book
+photos (an actual user report, not a hypothetical): OCR on the as-captured
+sideways frame produced pure gibberish and zero identifier matches on all
+three; trying all four rotations correctly extracted the real Depósito
+Legal number on all three. See the comment on `recognizeBestRotation` and
+the commit that introduced it for the full detail. If you're debugging OCR
+misses, check `raw_ocr_text` on the encounter — if it's dense gibberish
+rather than near-miss noisy text, orientation is the first thing to
+suspect, not the OCR model.
+
+**Known remaining limitation:** this fixes *rotation*, not *perspective*.
+A page photographed at a steep glancing angle (rather than roughly face-on)
+comes out skewed/foreshortened, and no rotation fixes that. One of the
+three real test photos above failed to extract anything for exactly this
+reason. Perspective correction (real deskew) would be a much larger feature
+and is out of scope for the pilot.
+
 ## Testing notes
 
-Camera-dependent flows (barcode scan, real-world OCR against an actual
-book) could not be tested with a physical device/camera in the environment
-this was built in. What *was* verified, against a real headless Chrome
-instance over a local Range-supporting server:
+Barcode-scan decode accuracy could not be tested with a physical
+device/camera in the environment this was built in — no phone was
+available. OCR, however, **was** validated against three real photos of
+Portuguese books' ficha técnica pages (provided by the user after an actual
+gibberish-OCR bug report), run through the real production pipeline end to
+end, not mocked: capture → OCR rotation retry → identifier extraction →
+real SQLite catalogue lookup via HTTP range requests. It correctly
+identified a real edition (Moby Dick, Relógio d'Água, 2005) from a
+genuinely flawed, uncorrected sideways photo. What else *was* verified,
+against a real headless Chrome instance over a local Range-supporting
+server:
 
 - The chunked SQLite catalogue: exact-match ISBN-13/ISBN-10/Depósito Legal
   lookups return correct rows via real HTTP range requests (not mocked).
 - The full OCR pipeline runs end-to-end (Tesseract WASM loads, recognizes,
-  and the ladder correctly falls through to rung 4 → network search → the
-  honest "no identifier found" state) — tested against Chrome's synthetic
-  fake-camera feed, so decode *accuracy* against a real printed page is
-  untested, but the pipeline itself doesn't crash or hang.
+  rotation retry works, and the ladder correctly falls through to rung 4 →
+  network search → the honest "no identifier found" state) — both against
+  Chrome's synthetic fake-camera feed and against the three real book
+  photos above.
 - Barcode classification logic (Bookland-prefix acceptance, non-Bookland
   rejection, EAN-5 add-on ignoring, checksum validation) — unit-tested
   directly, not through an actual barcode decode.

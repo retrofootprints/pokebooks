@@ -24,8 +24,15 @@ App.util = (function () {
     return words.join(" ");
   }
 
+  // Strips whitespace, hyphens, and common OCR-noise punctuation that
+  // sometimes shows up where a hyphen or digit should be (quotes,
+  // apostrophes, periods, commas, backticks) — none of these are ever
+  // legitimately part of an ISBN, so stripping them is safe. This does NOT
+  // recover a digit OCR mis-read as punctuation (that's real data loss,
+  // not noise around correct data) — only helps when the digits themselves
+  // are intact and punctuation is just clutter between/around them.
   function onlyDigitsX(s) {
-    return (s || "").replace(/[\s-]/g, "");
+    return (s || "").replace(/[\s\-'"´`.,]/g, "");
   }
 
   function validIsbn13(digits) {
@@ -87,7 +94,23 @@ App.util = (function () {
   // "Deposito Legal", "Deposito legal", "Dep. Legal", "D.L.", "DL", with or
   // without "n.o" / "no" / "N.o", number may carry internal spaces.
   const DL_LABEL_RE = /dep[oó]sito\s*legal|dep\.?\s*legal|d\.?\s*l\.?/i;
-  const DL_NUM_RE = /([\d\s]{3,9}\s*\/\s*\d{2,4})/;
+  // Primary: requires the "/" between number and year — reliable, low
+  // false-positive risk.
+  const DL_NUM_STRICT_RE = /(\d[\d\s]{2,7}\d)\s*\/\s*(\d{2,4})\b/;
+  // Fallback, tried only when the strict pattern misses on a line that
+  // already matched DL_LABEL_RE: OCR sometimes drops the "/" entirely
+  // while reading every digit correctly (confirmed on a real photo —
+  // "166 353/01" printed on the page came back as "166 353 01"). Requires
+  // a plain 2-digit year specifically (not 2-4) to keep this fallback from
+  // matching arbitrary nearby numbers now that there's no slash to anchor on.
+  const DL_NUM_LOOSE_RE = /(\d[\d\s]{2,7}\d)\s+(\d{2})\b(?!\d)/;
+
+  function extractDLNumber(line) {
+    const m = DL_NUM_STRICT_RE.exec(line) || DL_NUM_LOOSE_RE.exec(line);
+    if (!m) return null;
+    const num = m[1].replace(/\s+/g, "");
+    return num ? num + "/" + m[2] : null;
+  }
 
   function extractDLFromText(text) {
     if (!text) return null;
@@ -95,22 +118,17 @@ App.util = (function () {
     const lines = text.split(/\n/);
     for (const line of lines) {
       if (DL_LABEL_RE.test(line)) {
-        const m = DL_NUM_RE.exec(line);
-        if (m) return normalizeDL(m[1]);
+        const dl = extractDLNumber(line);
+        if (dl) return dl;
       }
     }
     // Fall back: label and number might be adjacent across the whole text.
     const idx = text.search(DL_LABEL_RE);
     if (idx >= 0) {
-      const m = DL_NUM_RE.exec(text.slice(idx, idx + 60));
-      if (m) return normalizeDL(m[1]);
+      const dl = extractDLNumber(text.slice(idx, idx + 60));
+      if (dl) return dl;
     }
     return null;
-  }
-
-  function normalizeDL(raw) {
-    const val = raw.replace(/\s+/g, "");
-    return val || null;
   }
 
   // EAN-13 checksum (used for barcode validation; ISBN-13 uses the same
@@ -159,7 +177,7 @@ App.util = (function () {
   return {
     stripDiacritics, normText, onlyDigitsX,
     validIsbn13, validIsbn10, isbn10ToIsbn13, isbn13ToIsbn10,
-    extractIsbnFromText, extractDLFromText, normalizeDL, validEan13,
+    extractIsbnFromText, extractDLFromText, validEan13,
     roundCoord, toast, fmtDate, blobToBase64, base64ToBlob,
   };
 })();

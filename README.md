@@ -6,7 +6,10 @@ specific physical copy, not a work read or a library owned. Single-user
 pilot, no accounts, no server, no backend. Everything lives in the
 browser's IndexedDB. See [`pt-book-encounter-pilot-spec.md`](pt-book-encounter-pilot-spec.md)
 for the full spec this was built from, and [`docs/bnp-findings.md`](docs/bnp-findings.md)
-for the Phase 0 data investigation the whole design depends on.
+for the Phase 0 data investigation the whole design depends on. See
+[`docs/catalogue-gaps.md`](docs/catalogue-gaps.md) if a real book comes up
+"identifier detected, no catalogue match" — this is common and expected
+(reprints and pocket editions especially), not a bug.
 
 ## Running it
 
@@ -168,7 +171,9 @@ correctly re-labels every existing encounter, not just new ones.
                  artifact — see "Rebuilding the catalogue index" above)
 /scripts         investigate_bnp.py, build_index.py, chunk_db.py,
                  build_geodata.py, dev_server.js (local testing only)
-/docs            bnp-findings.md (Phase 0 investigation writeup)
+/docs            bnp-findings.md (Phase 0 investigation writeup),
+                 catalogue-gaps.md (running log of real books with a real
+                 DL/ISBN not in the BNP dump — reprints, pocket editions)
 ```
 
 `data/` (raw dumps, intermediate builds, local test scripts) is gitignored
@@ -224,6 +229,12 @@ server:
 - Barcode classification logic (Bookland-prefix acceptance, non-Bookland
   rejection, EAN-5 add-on ignoring, checksum validation) — unit-tested
   directly, not through an actual barcode decode.
+- `extractFichaTecnicaFields` (title/author/publisher/year suggestions for
+  the catalogue-gap case — see `docs/catalogue-gaps.md`), tested against
+  all four real reference photos' actual OCR output, including the
+  specific false-positive it was built to avoid (a photo-credit line
+  containing the word "autor" that an earlier, looser version of the regex
+  wrongly matched as the book's author).
 - The complete manual ("log it anyway") save loop: form → IndexedDB →
   log view → stats view, including the rung-distribution and
   identified/unidentified math.

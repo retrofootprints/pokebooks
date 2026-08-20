@@ -24,6 +24,12 @@ App.ladder = (function () {
       source: null,
       photo_blob: null,
       candidates: null, // rung 4 only: ranked list, never a single answer
+      // Regex-extracted {title, authors, publisher, year} guesses from the
+      // OCR'd ficha técnica text (App.util.extractFichaTecnicaFields) —
+      // only ever used as a manual-form pre-fill when no catalogue/network
+      // edition was found; never treated as a match. null when there was
+      // no OCR text to extract from (barcode-only or "log it anyway").
+      suggestedFields: null,
     };
   }
 
@@ -77,6 +83,11 @@ App.ladder = (function () {
 
     const result = await App.ocr.recognizeBestRotation(ocrBlob || photoBlob, onAttempt);
     draft.raw_ocr_text = result.text;
+    // Computed unconditionally (cheap regex work) so it's available as a
+    // manual-form pre-fill regardless of which rung this ends up on — most
+    // useful when an identifier is found but nothing matches a catalogue
+    // or network record, but there's no harm in having it ready either way.
+    draft.suggestedFields = App.util.extractFichaTecnicaFields(result.text, result.dl);
 
     if (result.isbn) {
       draft.resolution_rung = 2;

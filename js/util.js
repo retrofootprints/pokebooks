@@ -131,6 +131,113 @@ App.util = (function () {
     return null;
   }
 
+  // Best-effort field extraction from ficha-técnica OCR text — title,
+  // author, publisher, year — for when no identifier matched a catalogue
+  // or network record. Deliberately regex/pattern-based, not a model: the
+  // ficha técnica has a small set of recurring labeled patterns
+  // ("Título:", "Autor:", a publisher name near "Editora"/"Editores"/
+  // "Edições"/"Publicações", a year attached to the Depósito Legal
+  // number) that show up across different publishers' layouts. This is a
+  // pre-fill suggestion for the manual form, never authoritative — the
+  // user reviews and corrects every field before saving, same as every
+  // other OCR/network-derived value in this app.
+  //
+  // Patterns were built and verified against four real photographed ficha
+  // técnica pages (see docs/catalogue-gaps.md), not guessed. Two specific
+  // failure modes drove the design:
+  //   - OCR often prepends a stray garbage character before a label on its
+  //     own line ("É | Título:" instead of "Título:") — matching requires
+  //     tolerating a few leading characters, not anchoring strictly to
+  //     line-start.
+  //   - But tolerating too much leads to real false positives: "Fotografia
+  //     do autor: Marina Waters" (a PHOTO CREDIT line) matches a loose
+  //     "autor" search if the label isn't required near the start of the
+  //     line. The `.{0,6}` bound is deliberately tight — enough to skip a
+  //     one-character OCR artifact, not enough to skip a real preceding
+  //     word.
+  const TITLE_LABEL_RE = /^.{0,6}\bt[íi]tulo\s*[:;]\s*(.+)/i;
+  const ORIGINAL_TITLE_LABEL_RE = /t[íi]tulo\s+original\s*[:;]\s*(.+)/i;
+  const AUTHOR_LABEL_RE = /^.{0,6}\bautor(?:es)?\s*[:;]\s*(.+)/i;
+  const PUBLISHER_KEYWORD_RE = /\b(editora|editores|edi[cç][õo]es|publica[cç][õo]es)\b/i;
+  const PUBLISHER_EXCLUDE_RE = /dep[oó]sito|isbn|www\.|http|@|copyright/i;
+
+  function cleanExtractedLine(s) {
+    return s.replace(/[|"“”«»]/g, "").replace(/\s{2,}/g, " ").trim();
+  }
+
+  function extractTitleField(text) {
+    for (const line of text.split(/\n/)) {
+      if (/t[íi]tulo\s+original/i.test(line)) continue; // handled separately, as a fallback only
+      const m = TITLE_LABEL_RE.exec(line);
+      if (m) return cleanExtractedLine(m[1]);
+    }
+    const om = ORIGINAL_TITLE_LABEL_RE.exec(text);
+    return om ? cleanExtractedLine(om[1]) : null;
+  }
+
+  function extractAuthorField(text) {
+    for (const line of text.split(/\n/)) {
+      const m = AUTHOR_LABEL_RE.exec(line);
+      if (m) return cleanExtractedLine(m[1]);
+    }
+    return null;
+  }
+
+  function extractPublisherField(text) {
+    for (const line of text.split(/\n/)) {
+      if (PUBLISHER_KEYWORD_RE.test(line) && !PUBLISHER_EXCLUDE_RE.test(line)) {
+        const cleaned = cleanExtractedLine(line).replace(/^[O0©]\s*\d{4}\s*,\s*/i, "");
+        if (cleaned.length > 3 && cleaned.length < 80) return cleaned;
+      }
+    }
+    return null;
+  }
+
+  // The Depósito Legal's own "/YY" or "/YYYY" suffix is a more reliable
+  // year source than scanning body text for a 4-digit number — it's
+  // structured data, not prose, and verified correct against all four
+  // reference photos (each one's DL year matched the printed edition year
+  // exactly). Two-digit years are expanded with a simple century pivot;
+  // wrong past ~2030 but this whole pilot is about contemporary Portuguese
+  // publishing, so that's an acceptable edge.
+  function yearFromDL(dl) {
+    if (!dl) return null;
+    const m = /\/(\d{2,4})$/.exec(dl);
+    if (!m) return null;
+    let y = m[1];
+    if (y.length === 2) {
+      const n = Number(y);
+      y = String(n <= 30 ? 2000 + n : 1900 + n);
+    }
+    return y;
+  }
+
+  function extractYearFallback(text) {
+    const years = [];
+    const re = /\b(19[0-9]{2}|20[0-2][0-9])\b/g;
+    let m;
+    while ((m = re.exec(text))) years.push(Number(m[1]));
+    return years.length ? String(Math.max(...years)) : null;
+  }
+
+  // Returns a partial {title, authors, publisher, year} object — only the
+  // fields it found something for. detectedDl, if given (already-extracted
+  // via extractDLFromText), is used for a more reliable year than the
+  // free-text fallback.
+  function extractFichaTecnicaFields(text, detectedDl) {
+    if (!text) return {};
+    const out = {};
+    const title = extractTitleField(text);
+    const authors = extractAuthorField(text);
+    const publisher = extractPublisherField(text);
+    const year = yearFromDL(detectedDl) || extractYearFallback(text);
+    if (title) out.title = title;
+    if (authors) out.authors = authors;
+    if (publisher) out.publisher = publisher;
+    if (year) out.year = year;
+    return out;
+  }
+
   // EAN-13 checksum (used for barcode validation; ISBN-13 uses the same
   // weighting so validIsbn13 covers it, but barcodes may not start 978/979
   // and this is used before we know that).
@@ -177,7 +284,7 @@ App.util = (function () {
   return {
     stripDiacritics, normText, onlyDigitsX,
     validIsbn13, validIsbn10, isbn10ToIsbn13, isbn13ToIsbn10,
-    extractIsbnFromText, extractDLFromText, validEan13,
+    extractIsbnFromText, extractDLFromText, extractFichaTecnicaFields, validEan13,
     roundCoord, toast, fmtDate, blobToBase64, base64ToBlob,
   };
 })();

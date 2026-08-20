@@ -52,6 +52,22 @@ App.ui = (function () {
     return key ? t(key) : ctx;
   }
 
+  // True when a real identifier was OCR'd (rung 2 or 3 — ISBN or Depósito
+  // Legal) but nothing in the local catalogue or network matched it, so
+  // whatever edition data exists came from the user typing it in by hand
+  // rather than a lookup. This is exactly the "book has a real DL/ISBN but
+  // isn't in this BNP dump" case — see docs/catalogue-gaps.md — worth
+  // flagging distinctly from a genuinely unidentified encounter (rung 5)
+  // since it usually means "known coverage gap," not "identification
+  // failed." Derived from stored fields rather than a separate flag, so it
+  // works on encounters saved before this existed too.
+  function isCatalogueGap(e) {
+    const hasIdentifier = !!(e.detected_isbn || e.detected_dl);
+    const identifierRung = e.resolution_rung === 2 || e.resolution_rung === 3;
+    const noMatch = !e.edition || e.edition.source === "user-entered";
+    return hasIdentifier && identifierRung && noMatch;
+  }
+
   function fieldRow(k, v) {
     if (!v) return "";
     return `<div class="field-row"><span class="k">${escapeHtml(k)}</span><span class="v">${escapeHtml(String(v))}</span></div>`;
@@ -81,6 +97,22 @@ App.ui = (function () {
   function formatIsbn(e) {
     if (e.isbn13 && e.isbn10 && e.isbn13 !== e.isbn10) return `${e.isbn13} / ${e.isbn10}`;
     return e.isbn13 || e.isbn10 || "";
+  }
+
+  // Shows regex-extracted {title, authors, publisher, year} guesses from
+  // the ficha técnica text (App.util.extractFichaTecnicaFields, computed in
+  // ladder.js) when there's no catalogue/network match — explicitly labeled
+  // unverified, same field labels as the matched-edition case for
+  // consistency. Returns "" when there's nothing to show, so callers can
+  // splice it in unconditionally.
+  function renderSuggestedFields(fields) {
+    if (!fields || !(fields.title || fields.authors || fields.publisher || fields.year)) return "";
+    let html = `<p class="source-note">${escapeHtml(t("suggestedFieldsIntro"))}</p>`;
+    html += fieldRow(t("fieldTitle"), fields.title);
+    html += fieldRow(t("fieldAuthor"), fields.authors);
+    html += fieldRow(t("fieldPublisher"), fields.publisher);
+    html += fieldRow(t("fieldYear"), fields.year);
+    return html;
   }
 
   // Renders the read-only result card after a rung 1-4 attempt. Returns
@@ -128,9 +160,11 @@ App.ui = (function () {
       html += `<p>${escapeHtml(t("identifierNoMatch"))}</p>`;
       html += fieldRow(t("fieldDetectedIsbn"), draft.detected_isbn);
       html += fieldRow(t("fieldDetectedDl"), draft.detected_dl);
+      html += renderSuggestedFields(draft.suggestedFields);
       html += `<p class="source-note">${escapeHtml(t("stillLogByHand"))}</p>`;
     } else {
       html += `<p>${escapeHtml(t("noIdentifierFound"))}</p>`;
+      html += renderSuggestedFields(draft.suggestedFields);
       if (draft.raw_ocr_text) {
         html += `<p class="source-note">${escapeHtml(t("ocrTextSample", { text: draft.raw_ocr_text.slice(0, 200) }))}</p>`;
       }
@@ -187,12 +221,16 @@ App.ui = (function () {
         const title = (e.edition && e.edition.title) || (e.note ? e.note.slice(0, 60) : t("unidentifiedEncounter"));
         const thumb = e.photo_blob ? `<img class="thumb" src="${blobUrl(e.photo_blob)}">` : `<div class="thumb"></div>`;
         const ctx = e.context ? contextLabel(e.context) : "";
+        const gapBadge = isCatalogueGap(e)
+          ? `<span class="rung-badge gap-badge">${escapeHtml(t("catalogueGapBadge"))}</span>`
+          : "";
         return `<div class="log-entry">
           ${thumb}
           <div class="body">
             <div class="title">${escapeHtml(title)}</div>
             <div class="meta">
               <span class="rung-badge rung-${e.resolution_rung}">${escapeHtml(rungLabel(e.resolution_rung))}</span>
+              ${gapBadge}
               ${escapeHtml(ctx)} · ${escapeHtml(App.util.fmtDate(e.timestamp))}
             </div>
           </div>

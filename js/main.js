@@ -192,7 +192,13 @@
     document.getElementById("manual-heading").textContent = App.i18n.t(
       editingKnown ? "manualHeadingConfirm" : "manualHeadingLog"
     );
-    App.ui.fillManualForm(currentDraft ? currentDraft.edition : null);
+    // Prefer a real matched edition; fall back to the OCR-derived
+    // suggestions (title/author/publisher/year regex-extracted from the
+    // ficha técnica text) when there's no match — both are the same
+    // {title, authors, publisher, year} shape, so fillManualForm doesn't
+    // need to know which one it got.
+    const prefill = currentDraft && (currentDraft.edition || currentDraft.suggestedFields);
+    App.ui.fillManualForm(prefill);
     App.ui.setManualPhoto(currentDraft ? currentDraft.photo_blob : null);
     App.ui.showView("manual");
   }

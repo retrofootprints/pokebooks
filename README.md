@@ -75,6 +75,39 @@ Madeira) — see the comment on `GROUPS` for why.
 
 Map data © [Natural Earth](https://www.naturalearthdata.com/), public domain.
 
+## Rebuilding the location search list
+
+The manual location picker (the "Set manually" option in the Capture
+screen's location banner — see "Location permission" below) searches
+`assets/pt-locations.json`, built by:
+
+```
+python scripts/build_locations.py
+```
+
+Source is [GeoNames.org](https://www.geonames.org/)'s per-country export
+(CC-BY 4.0 — attribution: © GeoNames.org contributors). It combines two
+levels: all 308 concelhos (municipalities — always unique names, and what
+most searches actually are: "Porto", "Sintra") and all 3,259 freguesias
+(civil parishes — real neighborhood/small-town names), de-duplicated
+against each other, ~183KB. Freguesia-only was the first attempt and had a
+real bug caught by testing: Portugal's 2013 parish mergers renamed many
+freguesias into compounds that don't contain their city's name at all —
+searching "Lisboa" against freguesias alone returned **zero** results,
+since Lisbon's own parishes are "Alvalade", "Arroios", "Santa Maria Maior",
+etc. Concelho names fixed that. See the script's own comments for two more
+data quirks it corrects for (GeoNames' primary name field being English
+for Lisbon/Açores instead of Portuguese, and two real Portuguese
+municipalities both legitimately named "Lagoa" — Algarve and Açores).
+
+Known limitation: informal neighborhood names below parish level (e.g.
+"Alfama", which is part of the "Santa Maria Maior" parish, not a parish of
+its own) aren't in the list — search finds parishes and municipalities,
+not every place name a person might think of. Same rounding as always
+applies regardless: any pick is rounded through `App.util.roundCoord`
+exactly like a GPS reading, so this is a search/data-entry convenience,
+not a change to what's ever stored.
+
 ## Language (English / Portuguese)
 
 All UI text lives in two dictionaries in `js/i18n.js` (`DICTS.en` and
@@ -113,11 +146,13 @@ correctly re-labels every existing encounter, not just new ones.
   and only the user can fix it in OS settings; the page can't prompt for,
   detect, or repair that, and **can't even reliably tell a site-level
   denial from OS location being off** (iOS reports these inconsistently).
-  That's why `js/geo.js` offers a **manual Portuguese district fallback**
-  and why the recovery copy names both possible causes instead of asserting
-  one. Since encounters only ever store 0.1° (~11 km) cells anyway, a
-  district capital rounds to the same cell GPS would give — the manual path
-  loses essentially nothing at the precision this app keeps.
+  That's why `js/geo.js` offers a **manual location fallback** — search over
+  Portuguese concelhos/freguesias, see "Rebuilding the location search list"
+  above — and why the recovery copy names both possible causes instead of
+  asserting one. Since encounters only ever store 0.1° (~11 km) cells
+  anyway, any picked point rounds to the same cell GPS would give anyone
+  standing there — the manual path loses essentially nothing at the
+  precision this app keeps.
   **Do not trust `navigator.permissions.query` for the denied state**:
   Safari reports `prompt` even when the site permission is set to Deny. It's
   used only to skip re-asking when it says `granted`; a real
@@ -180,15 +215,18 @@ correctly re-labels every existing encounter, not just new ones.
 /                index.html, styles.css       (GitHub Pages root)
 /js              app code (i18n, capture, barcode, ocr, catalogue, network,
                  ladder, idb, ui, map, main)
-/assets          portugal-outline.json (committed build artifact for the
-                 density map — see "Rebuilding the map outline")
+/assets          portugal-outline.json (density map, see "Rebuilding the
+                 map outline"), pt-locations.json (manual location search,
+                 see "Rebuilding the location search list") — both
+                 committed build artifacts
 /lib             vendored third-party libs (sql.js-httpvfs, zxing-wasm,
                  tesseract.js + core + Portuguese tessdata_fast model) —
                  no bundler, no CDN, plain <script> tags
 /db              chunked SQLite catalogue + config.json (committed build
                  artifact — see "Rebuilding the catalogue index" above)
 /scripts         investigate_bnp.py, build_index.py, chunk_db.py,
-                 build_geodata.py, dev_server.js (local testing only)
+                 build_geodata.py, build_locations.py, dev_server.js
+                 (local testing only)
 /docs            bnp-findings.md (Phase 0 investigation writeup),
                  catalogue-gaps.md (running log of real books with a real
                  DL/ISBN not in the BNP dump — reprints, pocket editions)
@@ -253,6 +291,16 @@ server:
   specific false-positive it was built to avoid (a photo-credit line
   containing the word "autor" that an earlier, looser version of the regex
   wrongly matched as the book's author).
+- The location search/picker: ranking checked against ~15 real town
+  searches (caught and fixed two real bugs this way, not by reasoning —
+  see `scripts/build_locations.py`'s module docstring and `searchLocations`'s
+  comment in `js/geo.js`); GPS-granted, GPS-denied, GPS-failed-then-
+  recovered-via-search, and persistence-across-reload, all against a real
+  IndexedDB save producing correct `location_source`; a saved pick actually
+  rendering on the Map tab with GPS permanently denied (the actual point of
+  the feature); focus/cursor preserved in the search input across
+  keystrokes (a naive full-banner re-render on every keystroke would have
+  broken this).
 - The complete manual ("log it anyway") save loop: form → IndexedDB →
   log view → stats view, including the rung-distribution and
   identified/unidentified math.

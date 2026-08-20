@@ -307,8 +307,9 @@ App.ui = (function () {
   // render — the banner is re-rendered wholesale on every state change,
   // so handlers must be re-attached, not attached once.
   //   "prompt"  — undecided: explain, offer GPS or manual
-  //   "picking" — district chip list
-  //   "active"  — GPS granted, or a district chosen
+  //   "picking" — free-text search over freguesias (see renderLocationResults
+  //               below for why the results list is a separate render call)
+  //   "active"  — GPS granted, or a location chosen
   //   "failed"  — a real GPS attempt failed; offer manual as the way out
   function renderLocationBanner(state, data) {
     const el = document.getElementById("location-banner");
@@ -325,22 +326,15 @@ App.ui = (function () {
     } else if (state === "picking") {
       html =
         `<div class="loc-text">${escapeHtml(t("locBannerPickTitle"))}</div>` +
-        `<div class="chip-row" id="district-chips">` +
-        App.geo
-          .districts()
-          .map(
-            (d) =>
-              `<span class="chip" data-district="${escapeHtml(d.key)}">${escapeHtml(d.name)}</span>`
-          )
-          .join("") +
-        `</div>` +
+        `<input type="text" class="loc-search" id="loc-search-input" data-i18n-placeholder="locBannerSearchPlaceholder" placeholder="${escapeHtml(t("locBannerSearchPlaceholder"))}" autocomplete="off">` +
+        `<div id="loc-search-results"></div>` +
         `<div class="loc-actions">` +
         `<button type="button" class="btn small" id="btn-loc-cancel">${escapeHtml(t("locBannerPickCancel"))}</button>` +
         `</div>`;
     } else if (state === "active") {
       const label =
-        data && data.district
-          ? t("locBannerActiveManual", { district: data.district.name })
+        data && data.location
+          ? t("locBannerActiveManual", { district: data.location.name })
           : t("locBannerActiveGps");
       html =
         `<div class="loc-active">` +
@@ -363,8 +357,28 @@ App.ui = (function () {
     el.classList.toggle("loc-failed", state === "failed");
   }
 
+  // Updates only the results list inside the "picking" state, leaving the
+  // search input itself untouched — re-rendering the whole banner (and thus
+  // recreating the <input>) on every keystroke would steal focus and reset
+  // the cursor position mid-type.
+  function renderLocationResults(results, hasQuery) {
+    const el = document.getElementById("loc-search-results");
+    if (!el) return;
+    if (!results.length) {
+      el.innerHTML = hasQuery ? `<p class="status-line">${escapeHtml(t("locBannerNoResults"))}</p>` : "";
+      return;
+    }
+    el.innerHTML = results
+      .map(
+        (r, i) =>
+          `<div class="candidate loc-result" data-idx="${i}">${escapeHtml(r.name)}</div>`
+      )
+      .join("");
+  }
+
   return {
     showView, renderResult, fillManualForm, setManualPhoto, selectedContext,
-    renderLog, renderStats, renderLocationBanner, blobUrl, releaseObjectUrls,
+    renderLog, renderStats, renderLocationBanner, renderLocationResults,
+    blobUrl, releaseObjectUrls,
   };
 })();

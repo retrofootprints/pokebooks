@@ -6,9 +6,12 @@
 // {lat_rounded, lon_rounded} shapes:
 //   - GPS, via an explicitly user-initiated request (the Capture screen's
 //     location banner), never a blind automatic prompt. See requestLocation.
-//   - A manually picked Portuguese district, for users who keep GPS off at
-//     the OS level — where no amount of prompting helps, because the block
-//     is above the page (see PERMISSION LAYERS below).
+//   - A manually searched-and-picked Portuguese freguesia (civil parish —
+//     real neighborhood/small-town names, not just a district capital), for
+//     users who keep GPS off at the OS level — where no amount of prompting
+//     helps, because the block is above the page (see PERMISSION LAYERS
+//     below). Data is assets/pt-locations.json, built by
+//     scripts/build_locations.py from GeoNames (CC-BY 4.0 — see README).
 //
 // PERMISSION LAYERS. Location permission is three layers deep and a web
 // page only occupies the bottom one:
@@ -25,39 +28,62 @@ window.App = window.App || {};
 
 App.geo = (function () {
   const MANUAL_KEY = "pt-book-encounters-manual-location";
+  const LOCATIONS_URL = "assets/pt-locations.json";
 
-  // Portuguese districts (18 mainland) + the two autonomous regions, each
-  // with its capital's coordinates. Passed through App.util.roundCoord like
-  // any GPS reading, so a manual pick is indistinguishable in precision
-  // from a real fix — at 0.1 degrees (~11km) a district capital lands in
-  // the same cell GPS would give anyone in that city, which is exactly why
-  // this fallback costs nothing at the precision this app keeps.
+  let locationsPromise = null;
+
+  // Lazy-loaded once (176KB, 3259 freguesias) and cached — only fetched the
+  // first time the manual picker is actually opened, not on every page load.
+  function loadLocations() {
+    if (!locationsPromise) {
+      locationsPromise = fetch(LOCATIONS_URL).then((r) => {
+        if (!r.ok) throw new Error("could not load " + LOCATIONS_URL);
+        return r.json();
+      });
+    }
+    return locationsPromise;
+  }
+
+  // Diacritic-insensitive search over location names, reusing the same
+  // normalization the BNP title search uses (App.util.normText) — so
+  // "sao joao" correctly finds "São João" the same way title search already
+  // tolerates Portuguese accents.
   //
-  // Names stay in Portuguese in both UI languages: they're proper nouns,
-  // and "Lisboa"/"Açores" read correctly in an app about Portuguese books.
-  // Not a missing translation.
-  const DISTRICTS = [
-    { key: "aveiro", name: "Aveiro", lat: 40.64, lon: -8.65 },
-    { key: "beja", name: "Beja", lat: 38.02, lon: -7.86 },
-    { key: "braga", name: "Braga", lat: 41.55, lon: -8.43 },
-    { key: "braganca", name: "Bragança", lat: 41.81, lon: -6.76 },
-    { key: "castelo-branco", name: "Castelo Branco", lat: 39.82, lon: -7.49 },
-    { key: "coimbra", name: "Coimbra", lat: 40.21, lon: -8.43 },
-    { key: "evora", name: "Évora", lat: 38.57, lon: -7.91 },
-    { key: "faro", name: "Faro", lat: 37.02, lon: -7.93 },
-    { key: "guarda", name: "Guarda", lat: 40.54, lon: -7.27 },
-    { key: "leiria", name: "Leiria", lat: 39.74, lon: -8.81 },
-    { key: "lisboa", name: "Lisboa", lat: 38.72, lon: -9.14 },
-    { key: "portalegre", name: "Portalegre", lat: 39.29, lon: -7.43 },
-    { key: "porto", name: "Porto", lat: 41.15, lon: -8.61 },
-    { key: "santarem", name: "Santarém", lat: 39.24, lon: -8.69 },
-    { key: "setubal", name: "Setúbal", lat: 38.52, lon: -8.89 },
-    { key: "viana-do-castelo", name: "Viana do Castelo", lat: 41.69, lon: -8.83 },
-    { key: "vila-real", name: "Vila Real", lat: 41.3, lon: -7.74 },
-    { key: "viseu", name: "Viseu", lat: 40.66, lon: -7.91 },
-    { key: "madeira", name: "Madeira", lat: 32.65, lon: -16.91 },
-    { key: "acores", name: "Açores", lat: 37.74, lon: -25.68 },
-  ];
+  // Ranked in four tiers, cheapest/most-specific first — this exists
+  // because a naive "contains the query" search, tried first, put an
+  // obscure parish ("Terrugem (Sintra)") above the actual Sintra entry for
+  // the query "sintra": the query only matched inside the disambiguation
+  // suffix, not the real name. Confirmed by testing several town searches,
+  // not assumed:
+  //   0. exact match on the base name (before any " (" suffix)
+  //   1. base name starts with the query
+  //   2. base name contains the query
+  //   3. only the parenthetical disambiguation suffix contains the query
+  // Ties within a tier go to the shorter overall name (more likely what a
+  // short query meant).
+  async function searchLocations(query, limit) {
+    const locations = await loadLocations();
+    const q = App.util.normText(query);
+    if (!q) return [];
+    const scored = [];
+    for (const loc of locations) {
+      const parenIdx = loc.name.indexOf(" (");
+      const base = parenIdx === -1 ? loc.name : loc.name.slice(0, parenIdx);
+      const nBase = App.util.normText(base);
+      const nFull = App.util.normText(loc.name);
+
+      let tier;
+      if (nBase === q) tier = 0;
+      else if (nBase.startsWith(q)) tier = 1;
+      else if (nBase.indexOf(q) !== -1) tier = 2;
+      else if (nFull.indexOf(q) !== -1) tier = 3;
+      else continue;
+
+      scored.push({ loc, tier, len: loc.name.length });
+    }
+    scored.sort((a, b) => (a.tier !== b.tier ? a.tier - b.tier : a.len - b.len));
+    return scored.slice(0, limit || 8).map((s) => s.loc);
+  }
 
   // Resolves { ok: true, lat_rounded, lon_rounded } on success, or
   // { ok: false, reason } on failure — never rejects, so a caller can just
@@ -118,42 +144,42 @@ App.geo = (function () {
     return getRoundedLocation(10000);
   }
 
-  // --- manual district ---
+  // --- manual location (a searched-and-picked freguesia) ---
+  //
+  // The whole {name, lat, lon} object is persisted directly, not a key into
+  // a lookup table — unlike the earlier ~20-entry district list, the full
+  // 3259-entry dataset isn't something worth keeping loaded just to redisplay
+  // the current pick.
 
-  function districts() {
-    return DISTRICTS;
-  }
-
-  function findDistrict(key) {
-    return DISTRICTS.find((d) => d.key === key) || null;
-  }
-
-  function setManualLocation(key) {
-    if (!findDistrict(key)) return false;
+  function setManualLocation(location) {
+    if (!location || typeof location.lat !== "number" || typeof location.lon !== "number") return false;
     try {
-      localStorage.setItem(MANUAL_KEY, key);
+      localStorage.setItem(MANUAL_KEY, JSON.stringify(location));
     } catch (err) {
       return false; // private mode etc. — caller falls back to no location
     }
     return true;
   }
 
-  function getManualLocationKey() {
+  function getManualLocation() {
+    let raw;
     try {
-      return localStorage.getItem(MANUAL_KEY);
+      raw = localStorage.getItem(MANUAL_KEY);
     } catch (err) {
       return null;
     }
-  }
-
-  function getManualLocation() {
-    const d = findDistrict(getManualLocationKey());
-    if (!d) return null;
+    if (!raw) return null;
+    let location;
+    try {
+      location = JSON.parse(raw);
+    } catch (err) {
+      return null; // corrupt stored value — treat as unset rather than throw
+    }
     return {
       ok: true,
-      lat_rounded: App.util.roundCoord(d.lat),
-      lon_rounded: App.util.roundCoord(d.lon),
-      district: d,
+      lat_rounded: App.util.roundCoord(location.lat),
+      lon_rounded: App.util.roundCoord(location.lon),
+      location,
     };
   }
 
@@ -194,11 +220,9 @@ App.geo = (function () {
     getPermissionState,
     requestLocation,
     resolveLocationForSave,
-    districts,
-    findDistrict,
+    searchLocations,
     setManualLocation,
     getManualLocation,
-    getManualLocationKey,
     clearManualLocation,
   };
 })();

@@ -183,6 +183,27 @@ main {
 .location-banner .chip-row {
   margin-top: 0.5rem;
 }
+.loc-search {
+  width: 100%;
+  padding: 0.6rem 0.7rem;
+  margin-top: 0.5rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  font-size: 1rem;
+  font-family: inherit;
+}
+#loc-search-results {
+  max-height: 40vh;
+  overflow-y: auto;
+  margin-top: 0.5rem;
+}
+#loc-search-results .loc-result {
+  margin-bottom: 0.35rem;
+  padding: 0.6rem 0.75rem;
+}
+#loc-search-results .loc-result:last-child {
+  margin-bottom: 0;
+}
 .btn.small {
   padding: 0.35rem 0.7rem;
   font-size: 0.8rem;

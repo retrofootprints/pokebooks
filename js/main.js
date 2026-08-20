@@ -288,10 +288,13 @@
 
   // --- Location banner ---
 
+  let locSearchResults = []; // latest search results, indexed by the "picking" list's data-idx
+  let locSearchDebounce = null;
+
   async function refreshLocationBanner() {
     const manual = App.geo.getManualLocation();
     if (manual) {
-      App.ui.renderLocationBanner("active", { district: manual.district });
+      App.ui.renderLocationBanner("active", { location: manual.location });
     } else {
       const state = await App.geo.getPermissionState();
       // Only "granted" is trusted from the Permissions API — see the
@@ -309,8 +312,11 @@
     const manualBtn = document.getElementById("btn-loc-manual");
     if (manualBtn) {
       manualBtn.addEventListener("click", () => {
+        locSearchResults = [];
         App.ui.renderLocationBanner("picking");
         wireLocationBanner();
+        const input = document.getElementById("loc-search-input");
+        if (input) input.focus();
       });
     }
 
@@ -326,14 +332,28 @@
       });
     }
 
-    const chips = document.getElementById("district-chips");
-    if (chips) {
-      chips.addEventListener("click", async (e) => {
-        const chip = e.target.closest(".chip");
-        if (!chip) return;
-        if (App.geo.setManualLocation(chip.dataset.district)) {
-          const d = App.geo.findDistrict(chip.dataset.district);
-          App.util.toast(App.i18n.t("locToastManualSet", { district: d.name }));
+    const searchInput = document.getElementById("loc-search-input");
+    if (searchInput) {
+      searchInput.addEventListener("input", () => {
+        const query = searchInput.value;
+        clearTimeout(locSearchDebounce);
+        locSearchDebounce = setTimeout(async () => {
+          const hasQuery = !!query.trim();
+          locSearchResults = hasQuery ? await App.geo.searchLocations(query, 8) : [];
+          App.ui.renderLocationResults(locSearchResults, hasQuery);
+        }, 120);
+      });
+    }
+
+    const resultsEl = document.getElementById("loc-search-results");
+    if (resultsEl) {
+      resultsEl.addEventListener("click", async (e) => {
+        const item = e.target.closest(".loc-result");
+        if (!item) return;
+        const location = locSearchResults[Number(item.dataset.idx)];
+        if (!location) return;
+        if (App.geo.setManualLocation(location)) {
+          App.util.toast(App.i18n.t("locToastManualSet", { district: location.name }));
         }
         await refreshLocationBanner();
       });

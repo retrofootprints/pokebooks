@@ -83,9 +83,14 @@
   }
 
   async function shutterClicked() {
-    let blob;
+    // Two captures from the same frame: storedBlob is what gets saved/shown
+    // (small, resized — capturePhotoBlob), ocrBlob is a full-resolution
+    // capture OCR actually reads (captureHighResBlob). Both are grabbed
+    // before stopEverything() stops the stream.
+    let storedBlob, ocrBlob;
     try {
-      blob = await App.capture.capturePhotoBlob(videoEl);
+      storedBlob = await App.capture.capturePhotoBlob(videoEl);
+      ocrBlob = await App.capture.captureHighResBlob(videoEl);
     } catch (err) {
       App.util.toast("Capture failed: " + err.message);
       return;
@@ -94,7 +99,7 @@
     setStatus("Reading text (this can take a few seconds)…");
     App.ui.showView("capture"); // stay put but show progress via status line
     try {
-      const draft = await App.ladder.resolveFromPhoto(blob);
+      const draft = await App.ladder.resolveFromPhoto(storedBlob, ocrBlob);
       currentDraft = draft;
       setStatus("");
       App.ui.renderResult(draft);
@@ -104,7 +109,7 @@
     } catch (err) {
       setStatus("");
       App.util.toast("OCR failed: " + err.message + " — you can still log it by hand.");
-      currentDraft = App.ladder.resolveManual(blob);
+      currentDraft = App.ladder.resolveManual(storedBlob);
       openManualForm();
     }
   }

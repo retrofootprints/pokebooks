@@ -57,11 +57,20 @@ App.ladder = (function () {
   // Rungs 2-4: OCR the captured photo, try ISBN, then Depósito Legal, then
   // (network-only) a title/author search. Returns whichever rung matched
   // first, always including the raw OCR text for the record either way.
-  async function resolveFromPhoto(photoBlob) {
+  //
+  // photoBlob is the resized/compressed frame that gets stored and shown
+  // back to the user (1600px long edge — see capture.capturePhotoBlob).
+  // ocrBlob, when given, is a separate full-resolution capture
+  // (capture.captureHighResBlob) that OCR actually reads — the stored
+  // photo's size/quality target is tuned for browsing the log quickly, not
+  // for resolving small printed text, so feeding OCR the same lossy copy
+  // was starving it of the resolution it needs. Falls back to photoBlob if
+  // no separate capture was provided (e.g. resuming an older draft shape).
+  async function resolveFromPhoto(photoBlob, ocrBlob) {
     const draft = blankDraft();
     draft.photo_blob = photoBlob;
 
-    const text = await App.ocr.recognize(photoBlob);
+    const text = await App.ocr.recognize(ocrBlob || photoBlob);
     draft.raw_ocr_text = text;
 
     const isbnMatch = App.util.extractIsbnFromText(text);

@@ -288,8 +288,11 @@ form.manual-form textarea { min-height: 4rem; resize: vertical; }
   margin-top: 0.5rem;
 }
 .map-inset {
-  flex: 1;
+  flex: 1 1 0;
   min-width: 0;
+  /* Keeps a lone inset the same size as it would be alongside a second one,
+     instead of stretching to full width with a tiny island adrift in it. */
+  max-width: 220px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 0.4rem;

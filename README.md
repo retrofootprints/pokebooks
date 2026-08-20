@@ -99,6 +99,15 @@ Map data © [Natural Earth](https://www.naturalearthdata.com/), public domain.
   script corrects for it. If BNP ever fixes the header upstream,
   `BNP_HEADER` in `scripts/build_index.py` will need updating to match —
   check a few rows by hand before assuming the old shift still applies.
+- **One "Scan" button, not the spec's separate "Scan barcode" /
+  "Photograph page" pair.** Deliberate deviation, made after real hands-on
+  use: barcode detection is cheap enough to run continuously in the
+  background for the whole camera session regardless of intent, and the
+  shutter (for the OCR path — rungs 2-4) is available the entire time too,
+  rather than gated behind picking a mode up front. Whichever resolves
+  first wins. This removes a decision the user usually can't make in
+  advance anyway (you don't know if a given book has a barcode until you
+  look). See `startScanFlow` in `js/main.js`.
 
 ## Repo layout
 

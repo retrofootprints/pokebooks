@@ -27,12 +27,11 @@
   // aspect-ratio with the shutter button below it in normal document
   // flow, which pushed the button off-screen on some phones — reported
   // directly by a user on an iPhone 15 Pro.)
-  function showCameraUI(mode) {
+  function showCameraUI() {
     document.body.classList.add("camera-active");
     cameraWrap.classList.remove("hidden");
     cameraControls.classList.remove("hidden");
     captureGrid.classList.add("hidden");
-    document.getElementById("btn-shutter").classList.toggle("hidden", mode !== "photo");
   }
 
   function hideCameraUI() {
@@ -52,11 +51,22 @@
     hideCameraUI();
   }
 
-  // --- Rung 1: barcode scan ---
-  async function startBarcodeFlow() {
+  // --- Scan: one flow covering rungs 1-4 ---
+  //
+  // A single camera session now does both jobs at once, rather than
+  // making the user pre-choose "barcode" vs "photo" before they know
+  // whether the book even has a barcode. Barcode detection runs
+  // continuously in the background the whole time the camera is open
+  // (cheap — one detect() call per frame); the shutter button to capture
+  // the page for OCR is available the entire time too, not gated behind a
+  // separate mode. Whichever resolves first wins: a valid Bookland barcode
+  // jumps straight to rung 1, or the user can tap the shutter at any point
+  // to go the OCR route (rungs 2-4) — useful the moment they can see there's
+  // no barcode, or the book predates barcodes entirely.
+  async function startScanFlow() {
     try {
-      showCameraUI("barcode");
-      setStatus("Point the camera at the barcode…");
+      showCameraUI();
+      setStatus("Point at a barcode, or tap Capture to photograph the page.");
       await App.capture.startCamera(videoEl);
     } catch (err) {
       setStatus("Camera unavailable: " + err.message);
@@ -80,18 +90,6 @@
       },
       onTick: () => {},
     });
-  }
-
-  // --- Rungs 2-4: photograph page ---
-  async function startPhotoFlow() {
-    try {
-      showCameraUI("photo");
-      setStatus("Frame the ficha técnica / title page, then capture.");
-      await App.capture.startCamera(videoEl);
-    } catch (err) {
-      setStatus("Camera unavailable: " + err.message);
-      hideCameraUI();
-    }
   }
 
   async function shutterClicked() {
@@ -328,8 +326,7 @@
 
   // --- Bootstrap ---
   function wireStaticEvents() {
-    document.getElementById("btn-scan-barcode").addEventListener("click", startBarcodeFlow);
-    document.getElementById("btn-photograph-page").addEventListener("click", startPhotoFlow);
+    document.getElementById("btn-scan").addEventListener("click", startScanFlow);
     document.getElementById("btn-shutter").addEventListener("click", shutterClicked);
     document.getElementById("btn-cancel-camera").addEventListener("click", stopEverything);
     document.getElementById("btn-log-anyway").addEventListener("click", logAnywayClicked);

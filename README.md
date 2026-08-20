@@ -101,6 +101,23 @@ correctly re-labels every existing encounter, not just new ones.
 
 ## Known limitations (read before extending)
 
+- **Location permission used to fail silently.** `js/geo.js`'s
+  `getRoundedLocation()` originally swallowed any geolocation failure into
+  a bare `null`, so an encounter saved with permission denied (or timed
+  out, or GPS unavailable) looked identical to one where location was
+  never even attempted — no feedback, and the map would just quietly stay
+  empty with no way to tell why. It now resolves
+  `{ok, lat_rounded, lon_rounded}` or `{ok:false, reason}`, the reason is
+  logged to the console, and the save toast says so
+  ("Encounter saved (no location: permission denied)."). The permission
+  prompt itself is also now primed at the moment the camera opens
+  (`App.geo.primePermission()` in `startScanFlow`/`logAnywayClicked`),
+  alongside the camera permission prompt, rather than invisibly deep in
+  the save flow where a user could easily dismiss it without registering
+  what it was for. **This does not un-deny a permission the browser has
+  already recorded as denied** — once a user has actually said no,
+  `getCurrentPosition` won't prompt again; they need to reset it in their
+  browser's site settings.
 - **No full-text search / rung 4 is network-only.** The first build with
   an FTS5 index came out to ~508MB (spec's own "uncomfortably large"
   threshold); identifiers-only without any text index came to ~323MB.

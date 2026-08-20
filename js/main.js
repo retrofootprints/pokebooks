@@ -36,6 +36,16 @@
 
   function hideCameraUI() {
     document.body.classList.remove("camera-active");
+    // Forces a synchronous reflow right after dropping the fixed-position
+    // fullscreen overlay. Without this, some mobile browsers (seen on
+    // iPhone after a barcode auto-resolves: the result view is switched to
+    // in the DOM, but the camera view stays visually stuck on screen until
+    // the next unrelated touch/scroll forces a repaint) can leave the old
+    // layout painted until something else forces a repaint. Reading
+    // offsetHeight forces the browser to recompute layout immediately
+    // rather than lazily, which is the standard fix for this class of
+    // stuck-repaint bug.
+    void document.body.offsetHeight;
     cameraWrap.classList.add("hidden");
     cameraControls.classList.add("hidden");
     captureGrid.classList.remove("hidden");
@@ -64,6 +74,13 @@
   // to go the OCR route (rungs 2-4) — useful the moment they can see there's
   // no barcode, or the book predates barcodes entirely.
   async function startScanFlow() {
+    // Fire-and-forget: asks for location permission at the same moment as
+    // camera permission, so the user sees and can respond to both prompts
+    // together, instead of location being requested silently later at save
+    // time — which is easy to miss, and if the resulting encounter has no
+    // location, there's no way to tell whether that's because permission
+    // was denied, timed out, or something else.
+    App.geo.primePermission();
     try {
       showCameraUI();
       setStatus(App.i18n.t("statusScanPrompt"));
@@ -155,8 +172,8 @@
   }
 
   async function onResultConfirm() {
-    await saveEncounter(currentDraft, currentDraft.edition, null, null);
-    App.util.toast(App.i18n.t("toastEncounterSaved"));
+    const result = await saveEncounter(currentDraft, currentDraft.edition, null, null);
+    toastSaved(result);
     currentDraft = null;
     App.ui.showView("capture");
   }
@@ -182,6 +199,7 @@
 
   // --- Log it anyway (rung 5) ---
   function logAnywayClicked() {
+    App.geo.primePermission(); // see the comment on the same call in startScanFlow
     currentDraft = App.ladder.resolveManual(null);
     openManualForm();
   }
@@ -210,15 +228,21 @@
       });
     }
 
-    await saveEncounter(currentDraft, edition, context, { locationNote, note });
-    App.util.toast(App.i18n.t("toastEncounterSaved"));
+    const result = await saveEncounter(currentDraft, edition, context, { locationNote, note });
+    toastSaved(result);
     currentDraft = null;
     ev.target.reset();
     App.ui.showView("capture");
   }
 
+  // Returns { id, locationOk, locationReason } so callers can tell the
+  // user whether location was actually captured — previously this
+  // swallowed any geolocation failure into a silent null, which is how a
+  // user could scan a dozen books, see an empty map, and have no way to
+  // tell why (permission denied vs timeout vs no GPS fix vs unsupported
+  // are all very different problems with different fixes).
   async function saveEncounter(draft, edition, context, extra) {
-    const loc = await App.geo.getRoundedLocation().catch(() => null);
+    const loc = await App.geo.getRoundedLocation();
     const record = {
       timestamp: Date.now(),
       edition: edition || null,
@@ -226,15 +250,25 @@
       raw_ocr_text: draft.raw_ocr_text || null,
       detected_isbn: draft.detected_isbn || null,
       detected_dl: draft.detected_dl || null,
-      lat_rounded: loc ? loc.lat_rounded : null,
-      lon_rounded: loc ? loc.lon_rounded : null,
+      lat_rounded: loc.ok ? loc.lat_rounded : null,
+      lon_rounded: loc.ok ? loc.lon_rounded : null,
       context: context || (extra && extra.context) || null,
       location_note: (extra && extra.locationNote) || null,
       note: (extra && extra.note) || null,
       photo_blob: draft.photo_blob || null,
       confirmed: true,
     };
-    return App.idb.addEncounter(record);
+    const id = await App.idb.addEncounter(record);
+    return { id, locationOk: loc.ok, locationReason: loc.reason };
+  }
+
+  function toastSaved(saveResult) {
+    if (saveResult.locationOk) {
+      App.util.toast(App.i18n.t("toastEncounterSaved"));
+    } else {
+      const reasonKey = "locationReason" + saveResult.locationReason[0].toUpperCase() + saveResult.locationReason.slice(1);
+      App.util.toast(App.i18n.t("toastEncounterSavedNoLocation", { reason: App.i18n.t(reasonKey) }));
+    }
   }
 
   // --- Search escape hatch ---

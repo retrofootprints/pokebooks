@@ -9,6 +9,16 @@ App.ui = (function () {
     secondhand: "secondhand", owned: "already owned", other: "other",
   };
 
+  // Short names for what each rung actually detected, shown instead of
+  // (or alongside) the bare rung number wherever a rung appears in the UI.
+  const RUNG_LABELS = {
+    1: "Barcode",
+    2: "Printed ISBN",
+    3: "Depósito Legal",
+    4: "Title match",
+    5: "Logged by hand",
+  };
+
   const objectUrls = []; // revoke on next render to avoid leaking memory
 
   function releaseObjectUrls() {
@@ -30,11 +40,8 @@ App.ui = (function () {
     });
   }
 
-  function rungBadge(rung) {
-    const span = document.createElement("span");
-    span.className = "rung-badge rung-" + rung;
-    span.textContent = "rung " + rung;
-    return span;
+  function rungLabel(rung) {
+    return RUNG_LABELS[rung] || "rung " + rung;
   }
 
   function fieldRow(k, v) {
@@ -61,12 +68,15 @@ App.ui = (function () {
     }
 
     html += `<div style="margin-bottom:0.5rem">`;
-    html += `<span class="rung-badge rung-${draft.resolution_rung}">rung ${draft.resolution_rung}</span>`;
+    html += `<span class="rung-badge rung-${draft.resolution_rung}">${escapeHtml(rungLabel(draft.resolution_rung))}</span>`;
     html += `</div>`;
 
     if (draft.edition) {
       const e = draft.edition;
-      html += `<h3>${escapeHtml(e.title || "(untitled)")}</h3>`;
+      // Title is just another field row here, same level as the rest —
+      // not a separate heading — so the whole card reads as one compact,
+      // uniform list rather than a title with a table of specs under it.
+      html += fieldRow("Title", e.title || "(untitled)");
       html += fieldRow("Author", e.authors);
       html += fieldRow("Publisher", e.publisher);
       html += fieldRow("Place", e.place);
@@ -155,7 +165,7 @@ App.ui = (function () {
           <div class="body">
             <div class="title">${escapeHtml(title)}</div>
             <div class="meta">
-              <span class="rung-badge rung-${e.resolution_rung}">r${e.resolution_rung}</span>
+              <span class="rung-badge rung-${e.resolution_rung}">${escapeHtml(rungLabel(e.resolution_rung))}</span>
               ${escapeHtml(ctx)} · ${escapeHtml(App.util.fmtDate(e.timestamp))}
             </div>
           </div>
@@ -201,7 +211,7 @@ App.ui = (function () {
         const count = rungCounts[r] || 0;
         const pct = Math.round((count / maxRung) * 100);
         return `<div class="bar-row">
-          <span class="label">rung ${r}</span>
+          <span class="label">${escapeHtml(rungLabel(r))}</span>
           <span class="bar-track"><span class="bar-fill" style="width:${pct}%"></span></span>
           <span class="count">${count}</span>
         </div>`;

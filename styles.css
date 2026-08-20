@@ -142,6 +142,60 @@ main {
   margin-bottom: 1rem;
 }
 
+/* While the camera is open: fullscreen flex column with the video filling
+   whatever space is left after the status line and button row, both of
+   which keep their natural size and therefore stay visible without
+   scrolling on any screen. Header and bottom nav are hidden to reclaim
+   their space rather than letting the video shrink to make room for them. */
+body.camera-active {
+  overflow: hidden;
+  padding-bottom: 0;
+}
+body.camera-active header.app-header,
+body.camera-active nav.bottom-nav {
+  display: none;
+}
+body.camera-active main {
+  padding: 0;
+  max-width: none;
+  margin: 0;
+}
+body.camera-active #view-capture.active {
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  inset: 0;
+  background: #000;
+}
+body.camera-active .camera-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  aspect-ratio: unset;
+  border-radius: 0;
+  margin-bottom: 0;
+}
+body.camera-active .search-row,
+body.camera-active .log-anyway,
+body.camera-active #search-results {
+  display: none;
+}
+body.camera-active .status-line {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0.6rem 1rem;
+  min-height: 1.2em;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.6);
+  text-align: center;
+}
+body.camera-active .camera-controls {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0.75rem 1rem calc(0.75rem + env(safe-area-inset-bottom));
+  background: #000;
+}
+
 button.btn {
   padding: 0.65rem 1rem;
   border-radius: var(--radius);
@@ -254,7 +308,7 @@ form.manual-form textarea { min-height: 4rem; resize: vertical; }
 .stat-tile .num { font-size: 1.6rem; font-weight: 700; }
 .stat-tile .label { color: var(--muted); font-size: 0.8rem; }
 .bar-row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.4rem; }
-.bar-row .label { width: 6.5rem; font-size: 0.85rem; flex-shrink: 0; }
+.bar-row .label { width: 7.5rem; font-size: 0.8rem; flex-shrink: 0; line-height: 1.2; }
 .bar-track { flex: 1; height: 0.85rem; background: var(--border); border-radius: 999px; overflow: hidden; }
 .bar-fill { height: 100%; background: var(--accent); }
 .bar-row .count { width: 3rem; text-align: right; font-size: 0.85rem; color: var(--muted); }

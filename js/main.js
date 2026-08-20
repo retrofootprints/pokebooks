@@ -17,7 +17,18 @@
     statusLine.textContent = msg || "";
   }
 
+  // The "camera-active" body class drives a fullscreen layout in
+  // styles.css: header and bottom nav hidden, the capture view becomes a
+  // fixed-position flex column where the video flexes to fill whatever
+  // space is left after the status line and button row — both of which
+  // stay a fixed natural size, so they're always visible without
+  // scrolling, on any phone screen. See the "camera-active" rules in
+  // styles.css. (Previously the camera preview had a fixed 3:4
+  // aspect-ratio with the shutter button below it in normal document
+  // flow, which pushed the button off-screen on some phones — reported
+  // directly by a user on an iPhone 15 Pro.)
   function showCameraUI(mode) {
+    document.body.classList.add("camera-active");
     cameraWrap.classList.remove("hidden");
     cameraControls.classList.remove("hidden");
     captureGrid.classList.add("hidden");
@@ -25,6 +36,7 @@
   }
 
   function hideCameraUI() {
+    document.body.classList.remove("camera-active");
     cameraWrap.classList.add("hidden");
     cameraControls.classList.add("hidden");
     captureGrid.classList.remove("hidden");

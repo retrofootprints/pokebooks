@@ -264,6 +264,11 @@
     App.ui.renderStats(encounters);
   }
 
+  async function refreshMap() {
+    const encounters = await App.idb.getAllEncounters();
+    await App.map.render(encounters);
+  }
+
   // --- Export / Import ---
   async function exportClicked() {
     const data = await App.idb.exportAll();
@@ -342,6 +347,7 @@
         const view = btn.dataset.view;
         App.ui.showView(view);
         if (view === "log") await refreshLog();
+        if (view === "map") await refreshMap();
         if (view === "stats") await refreshStats();
       });
     });

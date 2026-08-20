@@ -8,5 +8,8 @@ data/
 __pycache__/
 *.pyc
 
+# Local Claude Code harness state, not project content
+.claude/
+
 # The published, chunked catalogue (db/) IS committed — it's the Phase 1
 # build artifact GitHub Pages serves. Do not add db/ here.

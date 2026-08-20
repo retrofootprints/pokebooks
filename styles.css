@@ -13,6 +13,19 @@
   --rung3: #6b4fa0;
   --rung4: #8a6415;
   --rung5: #6b6a66;
+
+  /* Density map. Sequential ramp, light->dark, validated with the dataviz
+     ordinal checks (monotone lightness, adjacent dL >= 0.06, light-end
+     contrast 2.23:1, single hue). It passes only against a WHITE surface,
+     which is why --map-land is white — on a tinted land fill the light end
+     falls to ~1.8:1 and fails. Keep in sync with RAMP in js/map.js. */
+  --map-cell-1: #7dbaa3;
+  --map-cell-2: #559b81;
+  --map-cell-3: #367a64;
+  --map-cell-4: #1f5f4f;
+  --map-land: #ffffff;
+  --map-outline: #9a978d;
+
   --radius: 10px;
   font-size: 16px;
 }
@@ -245,6 +258,96 @@ form.manual-form textarea { min-height: 4rem; resize: vertical; }
 .bar-track { flex: 1; height: 0.85rem; background: var(--border); border-radius: 999px; overflow: hidden; }
 .bar-fill { height: 100%; background: var(--accent); }
 .bar-row .count { width: 3rem; text-align: right; font-size: 0.85rem; color: var(--muted); }
+
+/* --- Map view --- */
+.map-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 62vh;
+  background: var(--bg);
+  border-radius: var(--radius);
+}
+.map-land { fill: var(--map-land); }
+.map-outline {
+  fill: none;
+  stroke: var(--map-outline);
+  stroke-width: 1;
+  /* keeps the coastline 1px regardless of the viewBox scale */
+  vector-effect: non-scaling-stroke;
+}
+.map-cell {
+  stroke: var(--map-land);
+  stroke-width: 0.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.map-insets {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+.map-inset {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.4rem;
+  background: var(--panel);
+}
+.map-inset .map-svg { max-height: 22vh; background: transparent; }
+/* Island groups span a wide extent (the Azores cover ~6 degrees of
+   longitude), so a 0.1 degree cell renders very small in an inset and the
+   white separator stroke would eat most of it. Cells are effectively never
+   adjacent out here, so drop the separator and keep the full fill. */
+.map-inset .map-cell { stroke: none; }
+.map-inset-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--muted);
+  margin-bottom: 0.2rem;
+}
+
+.map-legend { margin-top: 0.75rem; }
+.map-legend-title {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-bottom: 0.3rem;
+}
+.map-legend-items { display: flex; flex-wrap: wrap; gap: 0.75rem; }
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+}
+.legend-swatch {
+  width: 0.9rem;
+  height: 0.9rem;
+  border-radius: 3px;
+  display: inline-block;
+}
+
+.cell-list { margin-top: 1rem; }
+.cell-list h4 { margin: 0 0 0.3rem; font-size: 0.9rem; }
+.cell-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.3rem 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.85rem;
+}
+.cell-row:last-child { border-bottom: none; }
+.cell-row .k { color: var(--muted); }
+.cell-row .v { font-weight: 600; }
+
+.map-note {
+  margin-top: 0.75rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
 
 /* --- Bottom nav --- */
 nav.bottom-nav {

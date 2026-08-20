@@ -51,6 +51,27 @@ The BNP open data dump changes over time; to rebuild from a fresh copy:
 Total pipeline time on the full BNP dump: budget a few minutes for step 3
 (reads/normalises ~1.2M rows) and under a minute for the rest.
 
+## Rebuilding the map outline
+
+The density map (Map tab) draws Portugal from
+`assets/portugal-outline.json`, a small committed artifact built from
+Natural Earth 1:10m admin-0 data (public domain):
+
+```
+python scripts/build_geodata.py
+```
+
+It caches the 13MB source in `data/` (gitignored) and emits ~20KB. The
+outline is split into three groups — mainland, Madeira, Azores — because
+they cannot share one map extent: the mainland spans ~3.3° of longitude
+while the full territory spans ~25°, which would squash the mainland into
+an unreadable sliver. The map renders the mainland full-size and the island
+groups as insets, shown only when they actually contain encounters. The
+script deliberately drops the Selvagens (uninhabited islets ~250km south of
+Madeira) — see the comment on `GROUPS` for why.
+
+Map data © [Natural Earth](https://www.naturalearthdata.com/), public domain.
+
 ## Known limitations (read before extending)
 
 - **No full-text search / rung 4 is network-only.** The first build with
@@ -84,14 +105,16 @@ Total pipeline time on the full BNP dump: budget a few minutes for step 3
 ```
 /                index.html, styles.css       (GitHub Pages root)
 /js              app code (capture, barcode, ocr, catalogue, network,
-                 ladder, idb, ui, main)
+                 ladder, idb, ui, map, main)
+/assets          portugal-outline.json (committed build artifact for the
+                 density map — see "Rebuilding the map outline")
 /lib             vendored third-party libs (sql.js-httpvfs, zxing-wasm,
                  tesseract.js + core + Portuguese tessdata_fast model) —
                  no bundler, no CDN, plain <script> tags
 /db              chunked SQLite catalogue + config.json (committed build
                  artifact — see "Rebuilding the catalogue index" above)
 /scripts         investigate_bnp.py, build_index.py, chunk_db.py,
-                 dev_server.js (local testing only)
+                 build_geodata.py, dev_server.js (local testing only)
 /docs            bnp-findings.md (Phase 0 investigation writeup)
 ```
 
@@ -121,6 +144,23 @@ instance over a local Range-supporting server:
 - Live network search (rung 4 escape hatch) against the real OpenLibrary
   API, including a full export → import round-trip.
 - Export/import survive real Blob ↔ base64 photo round-tripping.
+- The density map, across five seeded scenarios: mainland-only, with island
+  insets, encounters with no location at all, a partial/outside-Portugal
+  mix, and empty. Cell placement was asserted geographically (Porto renders
+  north of Lisboa, Faro southernmost), island insets confirmed to appear
+  only when they hold encounters, adaptive binning checked against five
+  count distributions (every count lands in exactly one bin), and the
+  rendered map was screenshotted and inspected.
+
+### A note on the map's colour scale
+
+The density ramp is **sequential** (one hue, light→dark) and was validated
+programmatically, not chosen by eye — monotone lightness, adjacent ΔL ≥
+0.06, light-end contrast ≥ 2:1, single hue. It passes **only against a white
+surface**, which is why the landmass is filled white; on a tinted land fill
+the lightest step drops to ~1.8:1 and fails. The ramp is duplicated in
+`styles.css` (`--map-cell-*`) and `js/map.js` (`RAMP`) and the two must stay
+in sync — if you change one, change both and re-validate.
 
 Take a phone to a bookshop before trusting rungs 1-3 fully (per the
 spec's own build order) — that's the first honest signal this pilot is

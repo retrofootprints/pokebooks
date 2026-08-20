@@ -142,6 +142,52 @@ main {
 }
 .log-anyway:active { background: #f0efe9; }
 
+/* --- Location banner --- */
+.location-banner {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
+  padding: 0.75rem;
+  margin: 1rem 0 0;
+  font-size: 0.85rem;
+}
+.location-banner.loc-failed {
+  border-color: var(--warn);
+}
+.location-banner .loc-text {
+  color: var(--muted);
+  line-height: 1.4;
+}
+.location-banner .loc-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+}
+/* The "active" state is a single compact line: label on the left, its
+   controls on the right, no vertical stacking. */
+.location-banner .loc-active {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.location-banner .loc-active .loc-text {
+  color: var(--ink);
+  font-weight: 600;
+}
+.location-banner .loc-active .loc-actions {
+  margin-top: 0;
+}
+.location-banner .chip-row {
+  margin-top: 0.5rem;
+}
+.btn.small {
+  padding: 0.35rem 0.7rem;
+  font-size: 0.8rem;
+}
+
 /* --- Camera --- */
 .camera-wrap {
   position: relative;

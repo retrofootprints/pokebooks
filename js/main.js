@@ -74,13 +74,6 @@
   // to go the OCR route (rungs 2-4) — useful the moment they can see there's
   // no barcode, or the book predates barcodes entirely.
   async function startScanFlow() {
-    // Fire-and-forget: asks for location permission at the same moment as
-    // camera permission, so the user sees and can respond to both prompts
-    // together, instead of location being requested silently later at save
-    // time — which is easy to miss, and if the resulting encounter has no
-    // location, there's no way to tell whether that's because permission
-    // was denied, timed out, or something else.
-    App.geo.primePermission();
     try {
       showCameraUI();
       setStatus(App.i18n.t("statusScanPrompt"));
@@ -205,7 +198,6 @@
 
   // --- Log it anyway (rung 5) ---
   function logAnywayClicked() {
-    App.geo.primePermission(); // see the comment on the same call in startScanFlow
     currentDraft = App.ladder.resolveManual(null);
     openManualForm();
   }
@@ -248,7 +240,10 @@
   // tell why (permission denied vs timeout vs no GPS fix vs unsupported
   // are all very different problems with different fixes).
   async function saveEncounter(draft, edition, context, extra) {
-    const loc = await App.geo.getRoundedLocation();
+    // resolveLocationForSave never triggers a permission prompt — GPS is
+    // only read when permission was already granted via the location
+    // banner, otherwise it falls back to the manually picked district.
+    const loc = await App.geo.resolveLocationForSave();
     const record = {
       timestamp: Date.now(),
       edition: edition || null,
@@ -260,6 +255,12 @@
       lon_rounded: loc.ok ? loc.lon_rounded : null,
       context: context || (extra && extra.context) || null,
       location_note: (extra && extra.locationNote) || null,
+      // Where the coordinates came from ("gps" | "manual"), or null when
+      // there are none. The spec's "mark the source on every record" rule
+      // applies to a hand-picked coordinate as much as to OCR- or
+      // network-derived bibliographic data. Records saved before this
+      // existed simply lack the field — absent means unknown, not "gps".
+      location_source: loc.ok ? loc.source || null : null,
       note: (extra && extra.note) || null,
       photo_blob: draft.photo_blob || null,
       confirmed: true,
@@ -272,9 +273,85 @@
     if (saveResult.locationOk) {
       App.util.toast(App.i18n.t("toastEncounterSaved"));
     } else {
-      const reasonKey = "locationReason" + saveResult.locationReason[0].toUpperCase() + saveResult.locationReason.slice(1);
-      App.util.toast(App.i18n.t("toastEncounterSavedNoLocation", { reason: App.i18n.t(reasonKey) }));
+      // reason is a kebab-case token ("not-enabled") -> camelCase i18n key
+      // suffix ("NotEnabled"), so locationReasonNotEnabled resolves.
+      const reason = saveResult.locationReason || "unavailable";
+      const suffix = reason
+        .split("-")
+        .map((p) => p[0].toUpperCase() + p.slice(1))
+        .join("");
+      App.util.toast(
+        App.i18n.t("toastEncounterSavedNoLocation", { reason: App.i18n.t("locationReason" + suffix) })
+      );
     }
+  }
+
+  // --- Location banner ---
+
+  async function refreshLocationBanner() {
+    const manual = App.geo.getManualLocation();
+    if (manual) {
+      App.ui.renderLocationBanner("active", { district: manual.district });
+    } else {
+      const state = await App.geo.getPermissionState();
+      // Only "granted" is trusted from the Permissions API — see the
+      // comment on getPermissionState. Everything else shows the opt-in,
+      // which is harmless: it's an explanation, not a native prompt.
+      App.ui.renderLocationBanner(state === "granted" ? "active" : "prompt");
+    }
+    wireLocationBanner();
+  }
+
+  function wireLocationBanner() {
+    const gpsBtn = document.getElementById("btn-loc-gps");
+    if (gpsBtn) gpsBtn.addEventListener("click", locGpsClicked);
+
+    const manualBtn = document.getElementById("btn-loc-manual");
+    if (manualBtn) {
+      manualBtn.addEventListener("click", () => {
+        App.ui.renderLocationBanner("picking");
+        wireLocationBanner();
+      });
+    }
+
+    const cancelBtn = document.getElementById("btn-loc-cancel");
+    if (cancelBtn) cancelBtn.addEventListener("click", refreshLocationBanner);
+
+    const clearBtn = document.getElementById("btn-loc-clear");
+    if (clearBtn) {
+      clearBtn.addEventListener("click", async () => {
+        App.geo.clearManualLocation();
+        App.util.toast(App.i18n.t("locToastCleared"));
+        await refreshLocationBanner();
+      });
+    }
+
+    const chips = document.getElementById("district-chips");
+    if (chips) {
+      chips.addEventListener("click", async (e) => {
+        const chip = e.target.closest(".chip");
+        if (!chip) return;
+        if (App.geo.setManualLocation(chip.dataset.district)) {
+          const d = App.geo.findDistrict(chip.dataset.district);
+          App.util.toast(App.i18n.t("locToastManualSet", { district: d.name }));
+        }
+        await refreshLocationBanner();
+      });
+    }
+  }
+
+  async function locGpsClicked() {
+    const result = await App.geo.requestLocation();
+    if (result.ok) {
+      // A successful fix means permission is granted; clear any manual
+      // override so live GPS takes precedence from here on.
+      App.geo.clearManualLocation();
+      App.util.toast(App.i18n.t("locToastEnabled"));
+      App.ui.renderLocationBanner("active");
+    } else {
+      App.ui.renderLocationBanner("failed");
+    }
+    wireLocationBanner();
   }
 
   // --- Search escape hatch ---
@@ -424,6 +501,10 @@
     App.i18n.applyStaticTranslations();
     wireStaticEvents();
     App.ui.showView("capture");
+    // Renders the opt-in / current-location banner. Note this only reads
+    // stored state and (best-effort) the Permissions API — it never calls
+    // getCurrentPosition, so no native prompt fires on load.
+    refreshLocationBanner();
 
     // Data safety: Safari can evict IndexedDB silently without this.
     if (navigator.storage && navigator.storage.persist) {

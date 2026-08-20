@@ -299,8 +299,72 @@ App.ui = (function () {
       : `<div class="empty-state">${escapeHtml(t("noContextYet"))}</div>`;
   }
 
+  // --- Location banner ---
+  //
+  // Four states, all rendered into #location-banner. main.js owns the
+  // behaviour (which state to ask for, what the buttons do); this just
+  // draws. Buttons carry stable ids so main.js can wire them after each
+  // render — the banner is re-rendered wholesale on every state change,
+  // so handlers must be re-attached, not attached once.
+  //   "prompt"  — undecided: explain, offer GPS or manual
+  //   "picking" — district chip list
+  //   "active"  — GPS granted, or a district chosen
+  //   "failed"  — a real GPS attempt failed; offer manual as the way out
+  function renderLocationBanner(state, data) {
+    const el = document.getElementById("location-banner");
+    if (!el) return;
+    let html = "";
+
+    if (state === "prompt") {
+      html =
+        `<div class="loc-text">${escapeHtml(t("locBannerPrompt"))}</div>` +
+        `<div class="loc-actions">` +
+        `<button type="button" class="btn small" id="btn-loc-gps">${escapeHtml(t("locBannerEnable"))}</button>` +
+        `<button type="button" class="btn small" id="btn-loc-manual">${escapeHtml(t("locBannerSetManual"))}</button>` +
+        `</div>`;
+    } else if (state === "picking") {
+      html =
+        `<div class="loc-text">${escapeHtml(t("locBannerPickTitle"))}</div>` +
+        `<div class="chip-row" id="district-chips">` +
+        App.geo
+          .districts()
+          .map(
+            (d) =>
+              `<span class="chip" data-district="${escapeHtml(d.key)}">${escapeHtml(d.name)}</span>`
+          )
+          .join("") +
+        `</div>` +
+        `<div class="loc-actions">` +
+        `<button type="button" class="btn small" id="btn-loc-cancel">${escapeHtml(t("locBannerPickCancel"))}</button>` +
+        `</div>`;
+    } else if (state === "active") {
+      const label =
+        data && data.district
+          ? t("locBannerActiveManual", { district: data.district.name })
+          : t("locBannerActiveGps");
+      html =
+        `<div class="loc-active">` +
+        `<span class="loc-text">${escapeHtml(label)}</span>` +
+        `<span class="loc-actions">` +
+        `<button type="button" class="btn small" id="btn-loc-manual">${escapeHtml(t("locBannerChange"))}</button>` +
+        `<button type="button" class="btn small" id="btn-loc-clear">${escapeHtml(t("locBannerClear"))}</button>` +
+        `</span></div>`;
+    } else if (state === "failed") {
+      html =
+        `<div class="loc-text">${escapeHtml(t("locBannerFailed"))}</div>` +
+        `<div class="loc-actions">` +
+        `<button type="button" class="btn small" id="btn-loc-manual">${escapeHtml(t("locBannerSetManual"))}</button>` +
+        `<button type="button" class="btn small" id="btn-loc-gps">${escapeHtml(t("locBannerEnable"))}</button>` +
+        `</div>`;
+    }
+
+    el.innerHTML = html;
+    el.classList.toggle("hidden", !html);
+    el.classList.toggle("loc-failed", state === "failed");
+  }
+
   return {
     showView, renderResult, fillManualForm, setManualPhoto, selectedContext,
-    renderLog, renderStats, blobUrl, releaseObjectUrls,
+    renderLog, renderStats, renderLocationBanner, blobUrl, releaseObjectUrls,
   };
 })();

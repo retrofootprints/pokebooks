@@ -35,6 +35,11 @@
       <button class="btn" id="btn-cancel-camera" data-i18n="btnCancel">Cancel</button>
     </div>
 
+    <!-- Location opt-in. Rendered by App.ui.renderLocationBanner(); starts
+         hidden and is only shown once its state is known, so it never
+         flashes the wrong state on load. -->
+    <div class="location-banner hidden" id="location-banner"></div>
+
     <div class="capture-grid" id="capture-grid">
       <button class="big-button primary" id="btn-scan">
         <span class="icon">📷</span>

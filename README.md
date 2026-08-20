@@ -104,6 +104,24 @@ correctly re-labels every existing encounter, not just new ones.
 
 ## Known limitations (read before extending)
 
+- **Location permission is three layers deep and the page only owns the
+  bottom one.** Device master switch (iOS: Settings → Privacy → Location
+  Services) → browser app permission (Location Services → Safari →
+  Never/Ask) → per-site permission (the prompt the page can trigger, and
+  effectively only once — a denied prompt can never be re-triggered by the
+  page). If either of the top two blocks, `getCurrentPosition` just fails
+  and only the user can fix it in OS settings; the page can't prompt for,
+  detect, or repair that, and **can't even reliably tell a site-level
+  denial from OS location being off** (iOS reports these inconsistently).
+  That's why `js/geo.js` offers a **manual Portuguese district fallback**
+  and why the recovery copy names both possible causes instead of asserting
+  one. Since encounters only ever store 0.1° (~11 km) cells anyway, a
+  district capital rounds to the same cell GPS would give — the manual path
+  loses essentially nothing at the precision this app keeps.
+  **Do not trust `navigator.permissions.query` for the denied state**:
+  Safari reports `prompt` even when the site permission is set to Deny. It's
+  used only to skip re-asking when it says `granted`; a real
+  `getCurrentPosition` error is the only reliable signal.
 - **Location permission used to fail silently.** `js/geo.js`'s
   `getRoundedLocation()` originally swallowed any geolocation failure into
   a bare `null`, so an encounter saved with permission denied (or timed

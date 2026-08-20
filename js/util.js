@@ -139,7 +139,8 @@ App.util = (function () {
 
   function fmtDate(ts) {
     const d = new Date(ts);
-    return d.toLocaleString();
+    const lang = App.i18n ? App.i18n.getLang() : undefined;
+    return d.toLocaleString(lang);
   }
 
   function blobToBase64(blob) {

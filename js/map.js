@@ -16,6 +16,8 @@
 window.App = window.App || {};
 
 App.map = (function () {
+  const t = App.i18n.t;
+  const tn = App.i18n.tn;
   const OUTLINE_URL = "assets/portugal-outline.json";
   const CELL = 0.1; // degrees, matches App.util.roundCoord's precision
   const HALF = CELL / 2;
@@ -208,6 +210,12 @@ App.map = (function () {
 
   // --- text helpers ---
 
+  function escapeHtml(s) {
+    const d = document.createElement("div");
+    d.textContent = s;
+    return d.innerHTML;
+  }
+
   function fmtCoord(lat, lon) {
     const ns = lat >= 0 ? "N" : "S";
     const ew = lon >= 0 ? "E" : "W";
@@ -224,8 +232,7 @@ App.map = (function () {
 
     const total = encounters.length;
     if (!total) {
-      root.innerHTML = `<div class="empty-state">No encounters logged yet.<br>
-        Once you log one with location allowed, it appears here.</div>`;
+      root.innerHTML = `<div class="empty-state">${escapeHtml(t("mapEmptyState"))}</div>`;
       return;
     }
 
@@ -233,7 +240,7 @@ App.map = (function () {
     try {
       outline = await loadOutline();
     } catch (err) {
-      root.innerHTML = `<div class="empty-state">Map outline failed to load (${err.message}).</div>`;
+      root.innerHTML = `<div class="empty-state">${escapeHtml(t("mapOutlineFailed", { msg: err.message }))}</div>`;
       return;
     }
 
@@ -242,8 +249,7 @@ App.map = (function () {
     if (!cells.length) {
       root.innerHTML =
         svgFor(outline.groups.mainland, [], [], 1000, 0.04) +
-        `<p class="map-note">None of your ${total} encounter${total === 1 ? " has" : "s have"} location data yet.
-         Location is optional and only recorded if you allow it.</p>`;
+        `<p class="map-note">${escapeHtml(tn("mapNoLocationYet", total, { total }))}</p>`;
       return;
     }
 
@@ -267,12 +273,12 @@ App.map = (function () {
 
     html +=
       `<div class="map-legend">` +
-      `<span class="map-legend-title">encounters per ~11 km cell</span>` +
+      `<span class="map-legend-title">${escapeHtml(t("mapLegendTitle"))}</span>` +
       `<div class="map-legend-items">` +
       bins
         .map(
           (b) =>
-            `<span class="legend-item"><span class="legend-swatch" style="background:${b.color}"></span>${b.label}</span>`
+            `<span class="legend-item"><span class="legend-swatch" style="background:${b.color}"></span>${escapeHtml(b.label)}</span>`
         )
         .join("") +
       `</div></div>`;
@@ -282,7 +288,7 @@ App.map = (function () {
     // recover exact counts.
     const top = cells.slice().sort((a, b) => b.count - a.count).slice(0, 5);
     html +=
-      `<div class="cell-list"><h4>Busiest cells</h4>` +
+      `<div class="cell-list"><h4>${escapeHtml(t("mapBusiestCells"))}</h4>` +
       top
         .map(
           (c) =>
@@ -294,17 +300,14 @@ App.map = (function () {
 
     const notes = [];
     if (missing) {
-      notes.push(
-        `${missing} of ${total} encounter${total === 1 ? "" : "s"} ` +
-          `${missing === 1 ? "has" : "have"} no location and ${missing === 1 ? "is" : "are"} not shown.`
-      );
+      notes.push(tn("mapMissingLocation", missing, { missing, total }));
     }
     if (grouped.elsewhere.length) {
       const n = grouped.elsewhere.reduce((s, c) => s + c.count, 0);
-      notes.push(`${n} encounter${n === 1 ? "" : "s"} outside Portugal ${n === 1 ? "is" : "are"} not shown on this map.`);
+      notes.push(tn("mapOutsidePortugal", n, { n }));
     }
-    notes.push("Positions are rounded to ~11 km at capture; exact coordinates are never stored.");
-    html += `<p class="map-note">${notes.join(" ")}</p>`;
+    notes.push(t("mapCoordNote"));
+    html += `<p class="map-note">${escapeHtml(notes.join(" "))}</p>`;
 
     root.innerHTML = html;
   }

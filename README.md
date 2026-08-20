@@ -72,6 +72,33 @@ Madeira) — see the comment on `GROUPS` for why.
 
 Map data © [Natural Earth](https://www.naturalearthdata.com/), public domain.
 
+## Language (English / Portuguese)
+
+All UI text lives in two dictionaries in `js/i18n.js` (`DICTS.en` and
+`DICTS.pt`). To correct a translation, find its key there and edit the
+Portuguese (or English) value — no other file needs to change, since every
+other module looks strings up by key via `App.i18n.t(key, params)` (or
+`App.i18n.tn(key, count, params)` for the handful of strings that need a
+singular/plural form — English and Portuguese both just need a `_one` and
+an `_other` variant of the key, no complex plural rules to worry about).
+
+Static markup (buttons, labels, headings in `index.html`) is translated via
+`data-i18n="key"` (and `data-i18n-placeholder="key"` for input
+placeholders) — `App.i18n.applyStaticTranslations()` walks those once at
+startup. Everything built dynamically (result card, log entries, stats,
+the map's notes and legend) calls `t()`/`tn()` directly each time it
+renders.
+
+Language is decided once per page load — a stored preference, else the
+browser's language, else English — and the header's EN/PT toggle just
+persists the choice and reloads the page, rather than live-translating
+whatever's currently on screen. This was a deliberate simplification: it
+avoids having to track and re-render "whatever view happens to be open"
+when the language changes. Records already in IndexedDB are unaffected by
+language — `context`/`resolution_rung` are stored as raw values (`"shop"`,
+`3`, …) and only translated at render time, so switching language
+correctly re-labels every existing encounter, not just new ones.
+
 ## Known limitations (read before extending)
 
 - **No full-text search / rung 4 is network-only.** The first build with
@@ -113,7 +140,7 @@ Map data © [Natural Earth](https://www.naturalearthdata.com/), public domain.
 
 ```
 /                index.html, styles.css       (GitHub Pages root)
-/js              app code (capture, barcode, ocr, catalogue, network,
+/js              app code (i18n, capture, barcode, ocr, catalogue, network,
                  ladder, idb, ui, map, main)
 /assets          portugal-outline.json (committed build artifact for the
                  density map — see "Rebuilding the map outline")
@@ -193,6 +220,13 @@ server:
   only when they hold encounters, adaptive binning checked against five
   count distributions (every count lands in exactly one bin), and the
   rendered map was screenshotted and inspected.
+- English/Portuguese switching: default-language detection, the header
+  toggle's persist-and-reload, and — the part most likely to silently
+  break on a careless edit — that a record saved while the app is in one
+  language re-labels correctly after switching to the other, since
+  `context`/`resolution_rung` are stored as raw values and only translated
+  at render time. Grep the codebase for a stray hardcoded English string
+  before assuming this is complete after future UI changes.
 
 ### A note on the map's colour scale
 

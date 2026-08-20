@@ -11,8 +11,12 @@
 
 <header class="app-header">
   <div>
-    <h1>Encontros de Livros</h1>
-    <div class="subtitle">book encounter log — pilot</div>
+    <h1 data-i18n="appTitle">Encontros de Livros</h1>
+    <div class="subtitle" data-i18n="appSubtitle">book encounter log — pilot</div>
+  </div>
+  <div class="lang-switch" id="lang-switch">
+    <button type="button" data-lang="en">EN</button>
+    <button type="button" data-lang="pt">PT</button>
   </div>
 </header>
 
@@ -27,23 +31,23 @@
     </div>
     <div class="status-line" id="capture-status"></div>
     <div class="camera-controls hidden" id="camera-controls">
-      <button class="btn primary" id="btn-shutter">Capture photo</button>
-      <button class="btn" id="btn-cancel-camera">Cancel</button>
+      <button class="btn primary" id="btn-shutter" data-i18n="btnCapturePhoto">Capture photo</button>
+      <button class="btn" id="btn-cancel-camera" data-i18n="btnCancel">Cancel</button>
     </div>
 
     <div class="capture-grid" id="capture-grid">
       <button class="big-button primary" id="btn-scan">
         <span class="icon">📷</span>
-        <span>Scan book</span>
+        <span data-i18n="btnScanBook">Scan book</span>
       </button>
     </div>
 
     <div class="search-row">
-      <input type="text" id="search-input" placeholder="Search title or author…">
-      <button class="btn" id="btn-search">Search</button>
+      <input type="text" id="search-input" data-i18n-placeholder="searchPlaceholder" placeholder="Search title or author…">
+      <button class="btn" id="btn-search" data-i18n="btnSearch">Search</button>
     </div>
 
-    <button class="log-anyway" id="btn-log-anyway">Log it anyway — no identification needed</button>
+    <button class="log-anyway" id="btn-log-anyway" data-i18n="btnLogAnyway">Log it anyway — no identification needed</button>
 
     <div id="search-results"></div>
   </section>
@@ -55,77 +59,77 @@
 
   <!-- ===================== MANUAL / RUNG 5 FORM ===================== -->
   <section id="view-manual" class="view">
-    <h2 id="manual-heading">Log this encounter</h2>
+    <h2 id="manual-heading" data-i18n="manualHeadingLog">Log this encounter</h2>
     <form class="manual-form" id="manual-form">
       <img id="manual-photo-preview" class="result-photo hidden">
 
-      <label for="m-title">Title</label>
+      <label for="m-title" data-i18n="fieldTitle">Title</label>
       <input type="text" id="m-title" name="title">
 
-      <label for="m-author">Author</label>
+      <label for="m-author" data-i18n="fieldAuthor">Author</label>
       <input type="text" id="m-author" name="author">
 
-      <label for="m-publisher">Publisher</label>
+      <label for="m-publisher" data-i18n="fieldPublisher">Publisher</label>
       <input type="text" id="m-publisher" name="publisher">
 
-      <label for="m-year">Year</label>
+      <label for="m-year" data-i18n="fieldYear">Year</label>
       <input type="text" id="m-year" name="year" inputmode="numeric">
 
-      <label>Context</label>
+      <label data-i18n="fieldContext">Context</label>
       <div class="chip-row" id="context-chips">
-        <span class="chip" data-value="shop">shop</span>
-        <span class="chip" data-value="library">library</span>
-        <span class="chip" data-value="friend">friend</span>
-        <span class="chip" data-value="fair">fair</span>
-        <span class="chip" data-value="secondhand">secondhand</span>
-        <span class="chip" data-value="owned">owned</span>
-        <span class="chip" data-value="other">other</span>
+        <span class="chip" data-value="shop" data-i18n="ctxShop">shop</span>
+        <span class="chip" data-value="library" data-i18n="ctxLibrary">library</span>
+        <span class="chip" data-value="friend" data-i18n="ctxFriend">friend</span>
+        <span class="chip" data-value="fair" data-i18n="ctxFair">fair</span>
+        <span class="chip" data-value="secondhand" data-i18n="ctxSecondhand">secondhand</span>
+        <span class="chip" data-value="owned" data-i18n="ctxOwned">owned</span>
+        <span class="chip" data-value="other" data-i18n="ctxOther">other</span>
       </div>
 
-      <label for="m-location-note">Location note (optional)</label>
-      <input type="text" id="m-location-note" placeholder="e.g. Alfarrabista da Rua Anchieta">
+      <label for="m-location-note" data-i18n="fieldLocationNote">Location note (optional)</label>
+      <input type="text" id="m-location-note" data-i18n-placeholder="locationNotePlaceholder" placeholder="e.g. Alfarrabista da Rua Anchieta">
 
-      <label for="m-note">Personal note (optional)</label>
+      <label for="m-note" data-i18n="fieldNote">Personal note (optional)</label>
       <textarea id="m-note"></textarea>
 
       <div class="action-row">
-        <button type="button" class="btn" id="btn-manual-cancel">Cancel</button>
-        <button type="submit" class="btn primary" id="btn-manual-save">Save encounter</button>
+        <button type="button" class="btn" id="btn-manual-cancel" data-i18n="btnCancel">Cancel</button>
+        <button type="submit" class="btn primary" id="btn-manual-save" data-i18n="btnSaveEncounter">Save encounter</button>
       </div>
     </form>
   </section>
 
   <!-- ===================== LOG VIEW ===================== -->
   <section id="view-log" class="view">
-    <h2>Log</h2>
+    <h2 data-i18n="logHeading">Log</h2>
     <div class="log-filters" id="log-filters">
-      <span class="chip selected" data-rung="all">all</span>
-      <span class="chip" data-rung="1">Barcode</span>
-      <span class="chip" data-rung="2">Printed ISBN</span>
-      <span class="chip" data-rung="3">Depósito Legal</span>
-      <span class="chip" data-rung="4">Title match</span>
-      <span class="chip" data-rung="5">Logged by hand</span>
+      <span class="chip selected" data-rung="all" data-i18n="filterAll">all</span>
+      <span class="chip" data-rung="1" data-i18n="rungBarcode">Barcode</span>
+      <span class="chip" data-rung="2" data-i18n="rungIsbn">Printed ISBN</span>
+      <span class="chip" data-rung="3" data-i18n="rungDl">Depósito Legal</span>
+      <span class="chip" data-rung="4" data-i18n="rungTitleMatch">Title match</span>
+      <span class="chip" data-rung="5" data-i18n="rungManual">Logged by hand</span>
     </div>
     <div id="log-list"></div>
   </section>
 
   <!-- ===================== MAP VIEW ===================== -->
   <section id="view-map" class="view">
-    <h2>Map</h2>
+    <h2 data-i18n="mapHeading">Map</h2>
     <div id="map-root"></div>
   </section>
 
   <!-- ===================== STATS VIEW ===================== -->
   <section id="view-stats" class="view">
-    <h2>Stats</h2>
+    <h2 data-i18n="statsHeading">Stats</h2>
     <div class="stat-grid" id="stat-tiles"></div>
-    <h3>Rung distribution</h3>
+    <h3 data-i18n="statsRungDistribution">Rung distribution</h3>
     <div id="rung-bars"></div>
-    <h3>By context</h3>
+    <h3 data-i18n="statsByContext">By context</h3>
     <div id="context-bars"></div>
     <div class="action-row">
-      <button class="btn" id="btn-export">Export JSON</button>
-      <button class="btn" id="btn-import">Import JSON</button>
+      <button class="btn" id="btn-export" data-i18n="btnExportJson">Export JSON</button>
+      <button class="btn" id="btn-import" data-i18n="btnImportJson">Import JSON</button>
       <input type="file" id="import-file" accept="application/json" class="hidden">
     </div>
   </section>
@@ -135,10 +139,10 @@
 <div class="toast" id="toast"></div>
 
 <nav class="bottom-nav">
-  <button class="nav-btn active" data-view="capture"><span class="icon">＋</span><span>Capture</span></button>
-  <button class="nav-btn" data-view="log"><span class="icon">☰</span><span>Log</span></button>
-  <button class="nav-btn" data-view="map"><span class="icon">◈</span><span>Map</span></button>
-  <button class="nav-btn" data-view="stats"><span class="icon">▤</span><span>Stats</span></button>
+  <button class="nav-btn active" data-view="capture"><span class="icon">＋</span><span data-i18n="navCapture">Capture</span></button>
+  <button class="nav-btn" data-view="log"><span class="icon">☰</span><span data-i18n="navLog">Log</span></button>
+  <button class="nav-btn" data-view="map"><span class="icon">◈</span><span data-i18n="navMap">Map</span></button>
+  <button class="nav-btn" data-view="stats"><span class="icon">▤</span><span data-i18n="navStats">Stats</span></button>
 </nav>
 
 <!-- Vendored third-party libs (see /lib and README.md) -->
@@ -146,7 +150,9 @@
 <script src="lib/zxing/zxing-reader.js"></script>
 <script src="lib/tesseract/tesseract.min.js"></script>
 
-<!-- App code -->
+<!-- App code — i18n.js must load first: it sets the active language before
+     any other module renders text. -->
+<script src="js/i18n.js"></script>
 <script src="js/util.js"></script>
 <script src="js/idb.js"></script>
 <script src="js/catalogue.js"></script>

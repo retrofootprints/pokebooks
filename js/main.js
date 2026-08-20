@@ -66,10 +66,10 @@
   async function startScanFlow() {
     try {
       showCameraUI();
-      setStatus("Point at a barcode, or tap Capture to photograph the page.");
+      setStatus(App.i18n.t("statusScanPrompt"));
       await App.capture.startCamera(videoEl);
     } catch (err) {
-      setStatus("Camera unavailable: " + err.message);
+      setStatus(App.i18n.t("statusCameraUnavailable", { msg: err.message }));
       hideCameraUI();
       return;
     }
@@ -78,7 +78,7 @@
       onBook: async (isbn13) => {
         await stopEverything();
         setStatus("");
-        App.util.toast("Looking up " + isbn13 + "…");
+        App.util.toast(App.i18n.t("toastLookingUp", { isbn: isbn13 }));
         const draft = await App.ladder.resolveFromBarcode(isbn13);
         currentDraft = draft;
         App.ui.renderResult(draft);
@@ -86,7 +86,7 @@
         App.ui.showView("result");
       },
       onReject: (raw) => {
-        App.util.toast("Not a book barcode (rejected): " + raw);
+        App.util.toast(App.i18n.t("toastNotBookBarcode", { raw }));
       },
       onTick: () => {},
     });
@@ -102,18 +102,18 @@
       storedBlob = await App.capture.capturePhotoBlob(videoEl);
       ocrBlob = await App.capture.captureHighResBlob(videoEl);
     } catch (err) {
-      App.util.toast("Capture failed: " + err.message);
+      App.util.toast(App.i18n.t("toastCaptureFailed", { msg: err.message }));
       return;
     }
     await stopEverything();
-    setStatus("Reading text (this can take a few seconds)…");
+    setStatus(App.i18n.t("statusReadingText"));
     App.ui.showView("capture"); // stay put but show progress via status line
     try {
       const draft = await App.ladder.resolveFromPhoto(storedBlob, ocrBlob, (deg, i, total) => {
         setStatus(
           i === 0
-            ? "Reading text (this can take a few seconds)…"
-            : `Reading text — that angle didn't work, trying another orientation (${i + 1}/${total})…`
+            ? App.i18n.t("statusReadingText")
+            : App.i18n.t("statusTryingRotation", { i: i + 1, total })
         );
       });
       currentDraft = draft;
@@ -124,7 +124,7 @@
       App.ui.showView("result");
     } catch (err) {
       setStatus("");
-      App.util.toast("OCR failed: " + err.message + " — you can still log it by hand.");
+      App.util.toast(App.i18n.t("toastOcrFailed", { msg: err.message }));
       currentDraft = App.ladder.resolveManual(storedBlob);
       openManualForm();
     }
@@ -156,7 +156,7 @@
 
   async function onResultConfirm() {
     await saveEncounter(currentDraft, currentDraft.edition, null, null);
-    App.util.toast("Encounter saved.");
+    App.util.toast(App.i18n.t("toastEncounterSaved"));
     currentDraft = null;
     App.ui.showView("capture");
   }
@@ -172,9 +172,9 @@
 
   function openManualForm() {
     const editingKnown = currentDraft && currentDraft.resolution_rung !== 5;
-    document.getElementById("manual-heading").textContent = editingKnown
-      ? "Confirm details"
-      : "Log this encounter";
+    document.getElementById("manual-heading").textContent = App.i18n.t(
+      editingKnown ? "manualHeadingConfirm" : "manualHeadingLog"
+    );
     App.ui.fillManualForm(currentDraft ? currentDraft.edition : null);
     App.ui.setManualPhoto(currentDraft ? currentDraft.photo_blob : null);
     App.ui.showView("manual");
@@ -211,7 +211,7 @@
     }
 
     await saveEncounter(currentDraft, edition, context, { locationNote, note });
-    App.util.toast("Encounter saved.");
+    App.util.toast(App.i18n.t("toastEncounterSaved"));
     currentDraft = null;
     ev.target.reset();
     App.ui.showView("capture");
@@ -242,16 +242,16 @@
     const q = document.getElementById("search-input").value.trim();
     if (!q) return;
     const resultsEl = document.getElementById("search-results");
-    resultsEl.innerHTML = `<p class="status-line">Searching…</p>`;
+    resultsEl.innerHTML = `<p class="status-line">${App.i18n.t("statusSearching")}</p>`;
     const candidates = await App.network.searchByText(q, 8).catch(() => []);
     if (!candidates.length) {
-      resultsEl.innerHTML = `<p class="status-line">No results.</p>`;
+      resultsEl.innerHTML = `<p class="status-line">${App.i18n.t("statusNoResults")}</p>`;
       return;
     }
     resultsEl.innerHTML = candidates
       .map(
         (c, i) => `<div class="candidate" data-idx="${i}">
-          <div class="title">${c.title || "(no title)"}</div>
+          <div class="title">${c.title || App.i18n.t("noTitle")}</div>
           <div class="meta">${[c.authors, c.publisher, c.year].filter(Boolean).join(" · ")}</div>
         </div>`
       )
@@ -315,10 +315,10 @@
       const text = await file.text();
       const data = JSON.parse(text);
       const count = await App.idb.importAll(data);
-      App.util.toast(`Imported ${count} encounter(s).`);
+      App.util.toast(App.i18n.tn("toastImported", count));
       await refreshStats();
     } catch (err) {
-      App.util.toast("Import failed: " + err.message);
+      App.util.toast(App.i18n.t("toastImportFailed", { msg: err.message }));
     } finally {
       ev.target.value = "";
     }
@@ -371,9 +371,17 @@
         if (view === "stats") await refreshStats();
       });
     });
+
+    // Switching language reloads the page (see js/i18n.js) rather than
+    // live-translating everything in place — simpler and avoids having to
+    // re-render whatever view happens to be open at the time.
+    document.querySelectorAll(".lang-switch button").forEach((btn) => {
+      btn.addEventListener("click", () => App.i18n.setLang(btn.dataset.lang));
+    });
   }
 
   function init() {
+    App.i18n.applyStaticTranslations();
     wireStaticEvents();
     App.ui.showView("capture");
 

@@ -212,6 +212,21 @@ App.util = (function () {
     return y;
   }
 
+  // The Depósito Legal's numeric prefix (e.g. "166353/01" -> 166353) — its
+  // position in the registry's running sequence, used by the discovery-grid
+  // filmstrip (js/ui.js's renderDiscoveryGrid) to place an encounter into a
+  // bucket. See docs/dl-pokedex-analysis.md for why this number is a
+  // reliable global ordinal (not reset per year) from ~1983 on. Returns
+  // null, not NaN, for anything that isn't the normalized "NNNNNN/YY[YY]"
+  // shape build_index.py and OCR extraction both produce.
+  function dlNumber(dl) {
+    if (!dl) return null;
+    const m = /^(\d+)\//.exec(dl);
+    if (!m) return null;
+    const n = parseInt(m[1], 10);
+    return Number.isFinite(n) ? n : null;
+  }
+
   function extractYearFallback(text) {
     const years = [];
     const re = /\b(19[0-9]{2}|20[0-2][0-9])\b/g;
@@ -285,6 +300,6 @@ App.util = (function () {
     stripDiacritics, normText, onlyDigitsX,
     validIsbn13, validIsbn10, isbn10ToIsbn13, isbn13ToIsbn10,
     extractIsbnFromText, extractDLFromText, extractFichaTecnicaFields, validEan13,
-    roundCoord, toast, fmtDate, blobToBase64, base64ToBlob,
+    roundCoord, toast, fmtDate, blobToBase64, base64ToBlob, dlNumber,
   };
 })();

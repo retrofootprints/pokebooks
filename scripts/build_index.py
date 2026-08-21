@@ -293,12 +293,47 @@ def main():
     # one number, on every stats-view visit.
     cur.execute("SELECT COUNT(DISTINCT deposito_legal) FROM editions WHERE deposito_legal IS NOT NULL AND deposito_legal != ''")
     book_dl_count = cur.fetchone()[0]
+
+    # dl_max: the discovery-grid filmstrip (js/ui.js's renderDiscoveryGrid)
+    # buckets encounters by the DL number's numeric prefix, and needs a fixed
+    # upper bound to size the grid — it can't just take max(deposito_legal)
+    # over the raw text column, because a small number of rows in BNP's own
+    # export have corrupt/mis-parsed DL fields with absurd numeric values
+    # (see docs/dl-pokedex-analysis.md's "small amount of garbage" finding,
+    # e.g. 8-9 digit numbers). A plausible-year filter alone doesn't catch
+    # all of it — checked directly: some rows pair a wildly wrong number
+    # with an otherwise-plausible year (e.g. "691001/93", when 1993's real
+    # range tops out around 73,000). DL_NUM_CEILING is therefore a
+    # deliberately round, hand-picked ceiling with headroom (current real
+    # max is ~565,000-597,000 depending on the year), not a
+    # percentile-derived exact bound — chasing a perfectly precise cutoff
+    # isn't worth it against data this noisy.
+    DL_NUM_CEILING = 600_000
+    dl_year_re = re.compile(r"^(\d+)/(\d{2,4})$")
+    current_year = datetime.date.today().year
+    dl_max = 0
+    cur.execute("SELECT deposito_legal FROM editions WHERE deposito_legal IS NOT NULL AND deposito_legal != ''")
+    for (dl,) in cur.fetchall():
+        m = dl_year_re.match(dl)
+        if not m:
+            continue
+        num, yr = int(m.group(1)), int(m.group(2))
+        if yr < 100:
+            yr = 1900 + yr if yr >= 30 else 2000 + yr
+        if not (1930 <= yr <= current_year) or num >= DL_NUM_CEILING:
+            continue
+        dl_max = max(dl_max, num)
+
     OUT_STATS.parent.mkdir(parents=True, exist_ok=True)
     OUT_STATS.write_text(
-        json.dumps({"book_dl_count": book_dl_count, "built_at": datetime.date.today().isoformat()}),
+        json.dumps({
+            "book_dl_count": book_dl_count,
+            "dl_max": dl_max,
+            "built_at": datetime.date.today().isoformat(),
+        }),
         encoding="utf-8",
     )
-    print(f"Wrote {OUT_STATS}: book_dl_count={book_dl_count}")
+    print(f"Wrote {OUT_STATS}: book_dl_count={book_dl_count}, dl_max={dl_max}")
 
     # title_norm/author_norm are kept as columns (per spec's Normalise step)
     # but deliberately NOT indexed: without FTS5 (see BUILD_FTS above) a

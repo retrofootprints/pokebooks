@@ -213,6 +213,22 @@ correctly re-labels every existing encounter, not just new ones.
   from data this app has access to. The UI labels this explicitly
   ("BNP-catalogued books," with the snapshot date) rather than implying
   it's a global total.
+- **The Stats view's "Discovery grid" is this device's own data only — it
+  is not, and cannot currently be, a multi-user/community view.** This
+  pilot has no backend (static GitHub Pages site, IndexedDB per browser),
+  so there is nowhere for one device to learn what any other device has
+  logged. The grid (`js/ui.js`'s `renderDiscoveryGrid`) buckets the
+  catalogue snapshot into fixed 200-DL-number squares and shades each by
+  how many of *this device's* encounters fall in it (raw count, 0/1/2/3-4/
+  5+ — GitHub-contribution-graph style, not percentage-of-bucket; a
+  realistic personal collection is far too small relative to
+  hundreds-per-bucket totals for a percentage scale to ever show anything
+  but the faintest shade). The UI copy says "this device" explicitly. If a
+  real multi-user backend gets built later, only the data source passed
+  into `renderDiscoveryGrid`/`renderDexCompletion` needs to change (an
+  aggregated feed instead of `App.idb.getAllEncounters()`) — the bucketing
+  and rendering code doesn't care where the encounter list came from. See
+  `docs/dl-pokedex-analysis.md`.
 - **BNP's published CSV header is wrong** (documented in detail in
   `docs/bnp-findings.md`): it's missing a column, and every downstream
   script corrects for it. If BNP ever fixes the header upstream,

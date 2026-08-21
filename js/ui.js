@@ -274,6 +274,70 @@ App.ui = (function () {
       `</div>`;
   }
 
+  // Discovery-grid filmstrip: one square per BUCKET_SIZE consecutive
+  // Depósito Legal numbers across the catalogue snapshot, oldest (top-left)
+  // to newest (bottom-right). Shaded by RAW COUNT of this device's own
+  // logged encounters landing in that bucket (0/1/2/3-4/5+), not by
+  // percentage of the bucket — with a realistic personal collection spread
+  // across ~378,899 books, percentage-of-bucket would almost always round
+  // to "barely nonzero," the same problem GitHub's own contribution graph
+  // solves the same way (raw count per day, not "% of a day's max possible
+  // commits"). See docs/dl-pokedex-analysis.md and the conversation that
+  // shaped this.
+  //
+  // Deliberately reads this device's own encounters only — there is no
+  // backend/shared data yet (this pilot is a static site, IndexedDB per
+  // browser). The function takes an already-fetched encounters array
+  // exactly like renderStats/renderDexCompletion, so a future multi-user
+  // build can point it at an aggregated feed with no change here — only
+  // the data source main.js passes in changes, not this rendering code.
+  const DISCOVERY_BUCKET_SIZE = 200;
+
+  function renderDiscoveryGrid(encounters, stats) {
+    const el = document.getElementById("discovery-grid-section");
+    if (!el) return;
+    if (!stats || !stats.dl_max) {
+      el.innerHTML = `<div class="dex-card empty">${escapeHtml(t("discoveryGridUnavailable"))}</div>`;
+      return;
+    }
+
+    const numBuckets = Math.max(1, Math.ceil(stats.dl_max / DISCOVERY_BUCKET_SIZE));
+    const counts = new Array(numBuckets).fill(0);
+    encounters.forEach((e) => {
+      const dl = e.edition && e.edition.deposito_legal;
+      const num = App.util.dlNumber(dl);
+      if (num === null) return;
+      const bucket = Math.min(numBuckets - 1, Math.floor(num / DISCOVERY_BUCKET_SIZE));
+      counts[bucket]++;
+    });
+
+    function levelFor(count) {
+      if (count <= 0) return 0;
+      if (count === 1) return 1;
+      if (count === 2) return 2;
+      if (count <= 4) return 3;
+      return 4;
+    }
+
+    const cellsHtml = counts.map((c) => `<div class="discovery-cell level-${levelFor(c)}"></div>`).join("");
+
+    el.innerHTML =
+      `<div class="dex-card">` +
+      `<div class="dex-title">${escapeHtml(t("discoveryGridTitle"))}</div>` +
+      `<div class="discovery-grid">${cellsHtml}</div>` +
+      `<div class="discovery-legend">` +
+      `<span>${escapeHtml(t("discoveryGridLess"))}</span>` +
+      `<span class="discovery-cell level-0"></span>` +
+      `<span class="discovery-cell level-1"></span>` +
+      `<span class="discovery-cell level-2"></span>` +
+      `<span class="discovery-cell level-3"></span>` +
+      `<span class="discovery-cell level-4"></span>` +
+      `<span>${escapeHtml(t("discoveryGridMore"))}</span>` +
+      `</div>` +
+      `<div class="dex-note">${escapeHtml(t("discoveryGridNote", { bucket: DISCOVERY_BUCKET_SIZE }))}</div>` +
+      `</div>`;
+  }
+
   function renderStats(encounters) {
     const total = encounters.length;
     const rungCounts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
@@ -412,7 +476,7 @@ App.ui = (function () {
 
   return {
     showView, renderResult, fillManualForm, setManualPhoto, selectedContext,
-    renderLog, renderStats, renderDexCompletion, renderLocationBanner, renderLocationResults,
+    renderLog, renderStats, renderDexCompletion, renderDiscoveryGrid, renderLocationBanner, renderLocationResults,
     blobUrl, releaseObjectUrls,
   };
 })();

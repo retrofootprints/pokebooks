@@ -422,6 +422,7 @@
     App.ui.renderStats(encounters);
     const stats = await App.catalogue.getStats();
     App.ui.renderDexCompletion(encounters, stats);
+    App.ui.renderDiscoveryGrid(encounters, stats);
   }
 
   async function refreshMap() {

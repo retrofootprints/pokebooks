@@ -105,3 +105,54 @@ snapshot-staleness gap against. The UI is deliberately worded to say
 "BNP-catalogued books" with the snapshot date shown, rather than implying a
 global total, and `{count}` is deduped by DL value per the series-sharing
 caveat above.
+
+## The discovery-grid filmstrip (shipped 2026-08-22)
+
+A second visualization, added after discussing what a Pokédex-style
+completion *grid* (not just a single number) could look like: a
+GitHub-contribution-graph-style filmstrip, one square per fixed-size range
+of consecutive DL numbers, oldest at top-left to newest at bottom-right.
+
+**Bucket size: 200 DL numbers/square**, chosen from a menu of options
+presented to the user (10/25/200/1000-per-square, trading grid fineness
+against phone-scroll length) — 200 was picked because it lands closest to
+the user's own "4-5 phone screens" intuition. With `dl_max` (see below) at
+596,560, that's **2,983 squares**, about 2-2.5 phone-screens of scrolling
+at typical mobile width.
+
+**Color: raw count, not percentage-of-bucket.** The user's own initial
+framing ("if you have one or two, first shade; eight or nine of ten,
+almost full") describes a *percentage* scale — but with realistic personal
+collection sizes (dozens to a few hundred books) spread across a
+378,899-book registry, a percentage-of-bucket scale would leave nearly
+every touched square at the very faintest shade forever, since even 1 book
+in a 200-book bucket is 0.5%. Resolved by switching to GitHub's own
+approach instead: color reflects **raw count logged**, thresholded into 5
+levels (0 / 1 / 2 / 3-4 / 5+), independent of bucket size. A single find is
+always clearly visible. Reuses the density map's already-validated
+sequential ramp (`--map-cell-1..4` in `styles.css`) rather than a new
+palette — same "shows how much of something," same white-panel background
+the ramp was validated against.
+
+**Personal data only — explicitly not multi-user.** The user's first
+instinct was that the shading should reflect what *everyone* has logged,
+not just them, for the eventual real multi-user app. Flagged directly:
+this pilot has no backend at all (static GitHub Pages, IndexedDB per
+browser) — there is currently no way for one device to know what another
+has found. Resolved by building against this device's own data now,
+labeled honestly ("this device," not "community"), with the rendering
+function taking an already-fetched encounters array as a parameter
+specifically so a future backend can swap in an aggregated feed without
+touching `renderDiscoveryGrid`/`renderDexCompletion` themselves.
+
+**`dl_max` (the grid's upper bound) needed its own outlier filter, found by
+testing, not assumed.** A plausible-year filter alone wasn't enough to
+exclude garbage: some rows pair a wildly wrong DL number with an otherwise
+plausible year (e.g. `691001/93`, when 1993's real range tops out around
+73,000 per the per-year table above) — confirmed directly by checking the
+top values under a first-attempt ceiling of 2,000,000, which came back
+essentially unfiltered (`1,998,831`, clearly still garbage). Replaced with
+a deliberately round, hand-picked ceiling (`DL_NUM_CEILING = 600_000` in
+`scripts/build_index.py`) rather than chasing a percentile-derived exact
+cutoff against data this noisy — yields `dl_max = 596,560`, a sane value
+consistent with the per-year table's ~560-570k range for recent years.

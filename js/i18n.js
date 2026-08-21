@@ -96,6 +96,11 @@ App.i18n = (function () {
       dexCompletionLine: "{count} of {total} BNP-catalogued books logged ({pct}%)",
       dexCompletionNote: "Books BNP has catalogued as of {date} — not every book ever published in Portugal. See the README for why.",
       dexCompletionUnavailable: "Catalogue completion data unavailable.",
+      discoveryGridTitle: "Discovery grid (this device)",
+      discoveryGridNote: "Each square is {bucket} consecutive Depósito Legal numbers, oldest at top-left to newest at bottom-right. Shaded by how many you've logged on this device — there's no shared/multi-user data yet, so this can't show what others have found.",
+      discoveryGridLess: "Less",
+      discoveryGridMore: "More",
+      discoveryGridUnavailable: "Discovery grid data unavailable.",
       noContextYet: "No context data yet.",
 
       statusScanPrompt: "Point at a barcode, or tap Capture to photograph the page.",
@@ -239,6 +244,11 @@ App.i18n = (function () {
       dexCompletionLine: "{count} de {total} livros catalogados pela BNP registados ({pct}%)",
       dexCompletionNote: "Livros que a BNP tinha catalogado em {date} — não todos os livros já publicados em Portugal. Ver o README para saber porquê.",
       dexCompletionUnavailable: "Dados de cobertura do catálogo indisponíveis.",
+      discoveryGridTitle: "Grelha de descoberta (este dispositivo)",
+      discoveryGridNote: "Cada quadrado representa {bucket} números de Depósito Legal consecutivos, do mais antigo (canto superior esquerdo) ao mais recente (canto inferior direito). A cor reflete quantos registou neste dispositivo — ainda não há dados partilhados entre utilizadores, por isso não é possível mostrar o que outros encontraram.",
+      discoveryGridLess: "Menos",
+      discoveryGridMore: "Mais",
+      discoveryGridUnavailable: "Dados da grelha de descoberta indisponíveis.",
       noContextYet: "Ainda não há dados de contexto.",
 
       statusScanPrompt: "Aponte a um código de barras, ou toque em Capturar para fotografar a página.",

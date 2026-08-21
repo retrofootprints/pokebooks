@@ -92,6 +92,10 @@ App.i18n = (function () {
       statDistinctEditions: "distinct editions",
       statUnidentified: "unidentified",
       statIdentified: "identified",
+      dexCompletionTitle: "Catalogue completion",
+      dexCompletionLine: "{count} of {total} BNP-catalogued books logged ({pct}%)",
+      dexCompletionNote: "Books BNP has catalogued as of {date} — not every book ever published in Portugal. See the README for why.",
+      dexCompletionUnavailable: "Catalogue completion data unavailable.",
       noContextYet: "No context data yet.",
 
       statusScanPrompt: "Point at a barcode, or tap Capture to photograph the page.",
@@ -231,6 +235,10 @@ App.i18n = (function () {
       statDistinctEditions: "edições distintas",
       statUnidentified: "não identificados",
       statIdentified: "identificados",
+      dexCompletionTitle: "Cobertura do catálogo",
+      dexCompletionLine: "{count} de {total} livros catalogados pela BNP registados ({pct}%)",
+      dexCompletionNote: "Livros que a BNP tinha catalogado em {date} — não todos os livros já publicados em Portugal. Ver o README para saber porquê.",
+      dexCompletionUnavailable: "Dados de cobertura do catálogo indisponíveis.",
       noContextYet: "Ainda não há dados de contexto.",
 
       statusScanPrompt: "Aponte a um código de barras, ou toque em Capturar para fotografar a página.",

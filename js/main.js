@@ -420,6 +420,8 @@
   async function refreshStats() {
     const encounters = await App.idb.getAllEncounters();
     App.ui.renderStats(encounters);
+    const stats = await App.catalogue.getStats();
+    App.ui.renderDexCompletion(encounters, stats);
   }
 
   async function refreshMap() {

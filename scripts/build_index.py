@@ -16,6 +16,8 @@ Produces:
     data/build/catalogue.sqlite3
 """
 import csv
+import datetime
+import json
 import re
 import sqlite3
 import sys
@@ -28,6 +30,7 @@ ROOT = Path(__file__).resolve().parent.parent
 CATALOGO = ROOT / "data" / "catalogo.csv"
 OUT_DIR = ROOT / "data" / "build"
 OUT_DB = OUT_DIR / "catalogue.sqlite3"
+OUT_STATS = ROOT / "assets" / "catalogue-stats.json"
 
 # With FTS5, the pilot's first full build came out to ~508 MB, well past the
 # spec's "uncomfortably large" line (250-300 MB expected, >100MB chunk count
@@ -278,6 +281,25 @@ def main():
     cur.execute("CREATE INDEX idx_isbn13 ON editions(isbn13)")
     cur.execute("CREATE INDEX idx_isbn10 ON editions(isbn10)")
     cur.execute("CREATE INDEX idx_dl ON editions(deposito_legal)")
+
+    # Dex-completion denominator (see docs/dl-pokedex-analysis.md): how many
+    # distinct Depósito Legal numbers are in THIS catalogue snapshot. The
+    # editions table is already filtered to Material type Book/blank (see
+    # KEEP_MATERIAL_TYPES above), so this is a book count, not a raw legal-
+    # deposit count. Shipped as a tiny separate JSON asset (same pattern as
+    # assets/pt-locations.json) rather than queried at runtime — a
+    # COUNT(DISTINCT ...) over the whole indexed column would mean the
+    # range-request VFS pulling a large fraction of the index just to show
+    # one number, on every stats-view visit.
+    cur.execute("SELECT COUNT(DISTINCT deposito_legal) FROM editions WHERE deposito_legal IS NOT NULL AND deposito_legal != ''")
+    book_dl_count = cur.fetchone()[0]
+    OUT_STATS.parent.mkdir(parents=True, exist_ok=True)
+    OUT_STATS.write_text(
+        json.dumps({"book_dl_count": book_dl_count, "built_at": datetime.date.today().isoformat()}),
+        encoding="utf-8",
+    )
+    print(f"Wrote {OUT_STATS}: book_dl_count={book_dl_count}")
+
     # title_norm/author_norm are kept as columns (per spec's Normalise step)
     # but deliberately NOT indexed: without FTS5 (see BUILD_FTS above) a
     # B-tree index on long text buys nothing for rung 4 (no local prefix/

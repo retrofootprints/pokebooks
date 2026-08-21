@@ -240,6 +240,40 @@ App.ui = (function () {
   }
 
   // --- Stats view ---
+  // Global "dex completion" card — distinct book Depósito Legal numbers the
+  // user has logged, out of how many are in the BNP catalogue snapshot this
+  // build shipped with (App.catalogue.getStats(), a static asset — see its
+  // comment). Only counts encounters whose matched edition actually carries
+  // a deposito_legal value: that's the specific population the denominator
+  // measures, not every logged encounter (ISBN-only matches, or unmatched
+  // rung-5 hand-logs, aren't part of this count either way).
+  //
+  // stats is null when the asset failed to load (offline first load, etc.)
+  // — render a plain unavailable line rather than a broken 0/undefined.
+  function renderDexCompletion(encounters, stats) {
+    const el = document.getElementById("dex-completion");
+    if (!el) return;
+    if (!stats || !stats.book_dl_count) {
+      el.innerHTML = `<div class="dex-card empty">${escapeHtml(t("dexCompletionUnavailable"))}</div>`;
+      return;
+    }
+    const dlKeys = new Set();
+    encounters.forEach((e) => {
+      if (e.edition && e.edition.deposito_legal) dlKeys.add(e.edition.deposito_legal);
+    });
+    const count = dlKeys.size;
+    const total = stats.book_dl_count;
+    const pct = total ? Math.min(100, (count / total) * 100) : 0;
+    const pctDisplay = pct >= 0.1 || pct === 0 ? pct.toFixed(1) : "<0.1";
+    el.innerHTML =
+      `<div class="dex-card">` +
+      `<div class="dex-title">${escapeHtml(t("dexCompletionTitle"))}</div>` +
+      `<div class="dex-line">${escapeHtml(t("dexCompletionLine", { count, total: total.toLocaleString(), pct: pctDisplay }))}</div>` +
+      `<div class="bar-track"><span class="bar-fill" style="width:${Math.max(pct, count ? 0.5 : 0)}%"></span></div>` +
+      `<div class="dex-note">${escapeHtml(t("dexCompletionNote", { date: stats.built_at }))}</div>` +
+      `</div>`;
+  }
+
   function renderStats(encounters) {
     const total = encounters.length;
     const rungCounts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
@@ -378,7 +412,7 @@ App.ui = (function () {
 
   return {
     showView, renderResult, fillManualForm, setManualPhoto, selectedContext,
-    renderLog, renderStats, renderLocationBanner, renderLocationResults,
+    renderLog, renderStats, renderDexCompletion, renderLocationBanner, renderLocationResults,
     blobUrl, releaseObjectUrls,
   };
 })();

@@ -44,7 +44,11 @@ The BNP open data dump changes over time; to rebuild from a fresh copy:
    `docs/bnp-findings.md` against a newer dump.
 3. `python scripts/build_index.py` — trims to books, normalises
    identifiers and text, builds `data/build/catalogue.sqlite3` with
-   indexes on `isbn13`/`isbn10`/`deposito_legal`.
+   indexes on `isbn13`/`isbn10`/`deposito_legal`. Also writes
+   `assets/catalogue-stats.json` (committed — a tiny file, not a build
+   intermediate), which the Stats view's "Catalogue completion" card reads
+   to know how many distinct book Depósito Legal numbers this snapshot
+   contains.
 4. `python scripts/chunk_db.py` — splits the built database into
    `db/db.sqlite3.NNN` chunks (20MB each, under GitHub's 100MB file limit)
    and writes `db/config.json`. **These chunk files under `db/` are
@@ -194,6 +198,21 @@ correctly re-labels every existing encounter, not just new ones.
   header per the Fetch spec), so the spec's "send a User-Agent naming the
   app" instruction for the OpenLibrary API is not actionable client-side.
   Requests go out with the browser's default UA.
+- **The Stats view's "Catalogue completion" number is coverage of BNP's
+  catalogue snapshot, not a total of every book ever published in
+  Portugal.** It's an exact, real count (`assets/catalogue-stats.json`,
+  written by `scripts/build_index.py`: distinct book Depósito Legal numbers
+  in the shipped snapshot — 378,899 as of the 2026-08 build) — not an
+  estimate of anything. But BNP's own cataloguing runs behind their legal
+  deposit intake (a book can have a genuine DL number and still not be
+  catalogued yet — see `docs/catalogue-gaps.md`), and the snapshot itself
+  only moves when someone re-downloads and rebuilds it, while real DL
+  registrations keep accruing (~13,000-16,000/year recently — see
+  `docs/dl-pokedex-analysis.md`). So the true denominator is always
+  somewhat larger than what's shown, by an amount that can't be measured
+  from data this app has access to. The UI labels this explicitly
+  ("BNP-catalogued books," with the snapshot date) rather than implying
+  it's a global total.
 - **BNP's published CSV header is wrong** (documented in detail in
   `docs/bnp-findings.md`): it's missing a column, and every downstream
   script corrects for it. If BNP ever fixes the header upstream,

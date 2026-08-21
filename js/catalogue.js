@@ -13,6 +13,22 @@ window.App = window.App || {};
 App.catalogue = (function () {
   let workerPromise = null;
   let unavailableReason = null;
+  let statsPromise = null;
+
+  // Dex-completion denominator — how many distinct book Depósito Legal
+  // numbers are in this catalogue snapshot. A tiny static asset (built by
+  // scripts/build_index.py) rather than a runtime query — see that
+  // script's comment on why COUNT(DISTINCT ...) isn't done through the
+  // range-request VFS. Never throws; the stats view just omits the
+  // completion card if this fails to load.
+  function getStats() {
+    if (!statsPromise) {
+      statsPromise = fetch("assets/catalogue-stats.json")
+        .then((r) => (r.ok ? r.json() : null))
+        .catch(() => null);
+    }
+    return statsPromise;
+  }
 
   async function getWorker() {
     if (unavailableReason) throw new Error(unavailableReason);
@@ -107,5 +123,5 @@ App.catalogue = (function () {
     return null;
   }
 
-  return { lookupByIsbn13, lookupByIsbn10, lookupByDL, lookupByIsbn };
+  return { lookupByIsbn13, lookupByIsbn10, lookupByDL, lookupByIsbn, getStats };
 })();

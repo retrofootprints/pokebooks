@@ -85,6 +85,24 @@ App.geo = (function () {
     return scored.slice(0, limit || 8).map((s) => s.loc);
   }
 
+  // Dev/testing helper only (the Log view's "Add random test locations"
+  // button) — n random points drawn from the same real Portuguese
+  // concelho/freguesia gazetteer the manual picker searches, already
+  // rounded the same way a real GPS or manual pick is. Reusing real
+  // places (rather than a random lat/lon within some bounding box) means
+  // every point lands somewhere real and inside the density map's actual
+  // land outline, not scattered into the sea or a to-scale-irrelevant
+  // corner of the bounding box.
+  async function randomTestLocations(n) {
+    const locations = await loadLocations();
+    const picks = [];
+    for (let i = 0; i < n; i++) {
+      const loc = locations[Math.floor(Math.random() * locations.length)];
+      picks.push({ lat_rounded: App.util.roundCoord(loc.lat), lon_rounded: App.util.roundCoord(loc.lon) });
+    }
+    return picks;
+  }
+
   // Resolves { ok: true, lat_rounded, lon_rounded } on success, or
   // { ok: false, reason } on failure — never rejects, so a caller can just
   // await it without a try/catch. reason is one of "unsupported",
@@ -221,6 +239,7 @@ App.geo = (function () {
     requestLocation,
     resolveLocationForSave,
     searchLocations,
+    randomTestLocations,
     setManualLocation,
     getManualLocation,
     clearManualLocation,

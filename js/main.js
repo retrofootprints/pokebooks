@@ -480,6 +480,40 @@
     await App.map.render(encounters);
   }
 
+  // --- Dev/testing: seed random location-only encounters ---
+  //
+  // No identification, no photo — just a way to see the density map filled
+  // in without scanning 50 real books. Points are drawn from the real
+  // gazetteer (App.geo.randomTestLocations), not a random lat/lon in some
+  // bounding box, so they always land on real ground the map actually
+  // renders. Marked in the note field so they're identifiable in the Log
+  // list and easy to tell apart from real encounters later.
+  async function seedRandomLocationsClicked() {
+    const locs = await App.geo.randomTestLocations(50);
+    const now = Date.now();
+    for (let i = 0; i < locs.length; i++) {
+      await App.idb.addEncounter({
+        timestamp: now - i,
+        edition: null,
+        resolution_rung: 5,
+        raw_ocr_text: null,
+        detected_isbn: null,
+        detected_dl: null,
+        lat_rounded: locs[i].lat_rounded,
+        lon_rounded: locs[i].lon_rounded,
+        context: null,
+        location_note: null,
+        location_source: "manual",
+        note: "Random test location (dev tool)",
+        photo_blob: null,
+        id_photo_blob: null,
+        confirmed: true,
+      });
+    }
+    App.util.toast(App.i18n.t("toastSeeded", { n: locs.length }));
+    await refreshLog();
+  }
+
   // --- Export / Import ---
   async function exportClicked() {
     const data = await App.idb.exportAll();
@@ -546,6 +580,8 @@
       logFilter = chip.dataset.rung;
       refreshLog();
     });
+
+    document.getElementById("btn-seed-random").addEventListener("click", seedRandomLocationsClicked);
 
     document.getElementById("btn-export").addEventListener("click", exportClicked);
     document.getElementById("btn-import").addEventListener("click", importClicked);

@@ -109,9 +109,8 @@ Known limitation: informal neighborhood names below parish level (e.g.
 its own) aren't in the list — search finds parishes and municipalities,
 not every place name a person might think of. Same rounding as always
 applies regardless: any pick is rounded through `App.util.roundCoord`
-(latitude) / `App.util.roundLon` (longitude) exactly like a GPS reading,
-so this is a search/data-entry convenience, not a change to what's ever
-stored.
+exactly like a GPS reading, so this is a search/data-entry convenience,
+not a change to what's ever stored.
 
 ## Language (English / Portuguese)
 
@@ -154,37 +153,33 @@ correctly re-labels every existing encounter, not just new ones.
   That's why `js/geo.js` offers a **manual location fallback** — search over
   Portuguese concelhos/freguesias, see "Rebuilding the location search list"
   above — and why the recovery copy names both possible causes instead of
-  asserting one. Since encounters only ever store ~11×11 km cells anyway
-  (see the next bullet), any picked point rounds to the same cell GPS
-  would give anyone standing there — the manual path loses essentially
-  nothing at the precision this app keeps.
+  asserting one. Since encounters only ever store 0.1° (~11 km) cells
+  anyway, any picked point rounds to the same cell GPS would give anyone
+  standing there — the manual path loses essentially nothing at the
+  precision this app keeps.
   **Do not trust `navigator.permissions.query` for the denied state**:
   Safari reports `prompt` even when the site permission is set to Deny. It's
   used only to skip re-asking when it says `granted`; a real
   `getCurrentPosition` error is the only reliable signal.
-- **Latitude and longitude round to different step sizes (0.1° vs 0.13°),
-  not the same one — this is what makes the density map's cells square.**
-  A degree of longitude shrinks by cos(latitude), so a naive 0.1°×0.1° bin
-  isn't square on the ground at Portuguese latitudes: ~11.1 km tall but only
-  ~8.5 km wide, and drawing that true footprint (the original version of
-  `js/map.js`) rendered visibly tall rectangles (measured w/h 0.771
-  mainland). `App.util.roundLon` (`js/util.js`) rounds longitude to 0.13°
-  instead, chosen specifically to close that gap: ~11×11 km cells and
-  ~0.2% off-square on the mainland, where most encounters will fall.
-  Latitude keeps rounding to 0.1° via `App.util.roundCoord` — a degree of
-  latitude doesn't shrink with longitude, so it didn't need to change.
-  Madeira/Azores are far enough from the reference latitude that even
-  0.13° leaves them a few percent off-square (measured: Madeira ~9%,
-  Azores ~2%), so `js/map.js`'s `svgFor` additionally draws the largest
-  square that fits *inside* the true cell (`side = min(w, h)`), centred —
-  now a small residual correction rather than doing most of the work. It
-  never extends beyond the real cell, and stored/exported coordinates are
-  exactly what's rendered; this is purely a legibility layer on top of an
-  already-near-square grid. Alternative considered and declined: binning
-  in a metric projection (ETRS89/PT-TM06) for exact equal-area squares
-  everywhere — more correct, but needs projection math, reprojecting the
-  outline, and separate zones for Madeira/Azores, for a difference that
-  only shows up in the insets.
+- **Map cells are drawn as squares inscribed in the bin, not as the bin's
+  true footprint.** A 0.1°×0.1° bin isn't square on the ground — a degree of
+  longitude shrinks by cos(latitude), so at Portuguese latitudes the cell is
+  ~11.1 km tall but only ~8.5 km wide, and drawing the real footprint (which
+  `js/map.js` used to do) renders visibly tall rectangles: measured w/h 0.771
+  mainland, 0.784 Azores, 0.841 Madeira. Squares were an explicit request, so
+  `svgFor` now draws the largest square that fits *inside* the true cell
+  (`side = min(w, h)`), vertically centred. Two deliberate consequences:
+  vertically adjacent cells show a ~23% gap (unavoidable when drawing squares
+  on a non-square lattice — the alternative, `max`, would overlap horizontal
+  neighbours and visually merge distinct cells), and the mark slightly
+  **overstates N–S precision** (implies ±4.25 km where the stored truth is
+  ±5.55 km). The mark never extends beyond the real cell, and stored/exported
+  coordinates are completely unchanged — but the drawn extent is a legibility
+  choice, so the stored 0.1° bin, not the square, is the privacy boundary.
+  Alternatives considered and declined: widening the longitude bin to 0.13°
+  (would make cells square on screen *and* ~11×11 km on the ground, at the
+  cost of changing stored data), and binning in a metric projection
+  (ETRS89/PT-TM06) for exact equal-area squares.
 - **Location permission used to fail silently.** `js/geo.js`'s
   `getRoundedLocation()` originally swallowed any geolocation failure into
   a bare `null`, so an encounter saved with permission denied (or timed

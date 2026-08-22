@@ -1,11 +1,6 @@
-// Location capture. Coordinates are rounded to ~11x11km cells at capture
-// time and the exact coordinate is never stored — see the spec's privacy
-// requirement. Latitude rounds to 0.1 degree (App.util.roundCoord);
-// longitude rounds to 0.13 degree (App.util.roundLon), not the same step
-// — a degree of longitude is shorter than a degree of latitude at
-// Portuguese latitudes, so matching step sizes would give tall
-// rectangular cells rather than roughly-square ones. See roundLon's
-// comment in js/util.js and js/map.js for the full reasoning.
+// Location capture. Coordinates are rounded to 1 decimal place (~11km
+// cells) at capture time and the exact coordinate is never stored — see
+// App.util.roundCoord and the spec's privacy requirement.
 //
 // Location can come from two places, both producing identical
 // {lat_rounded, lon_rounded} shapes:
@@ -103,7 +98,7 @@ App.geo = (function () {
     const picks = [];
     for (let i = 0; i < n; i++) {
       const loc = locations[Math.floor(Math.random() * locations.length)];
-      picks.push({ lat_rounded: App.util.roundCoord(loc.lat), lon_rounded: App.util.roundLon(loc.lon) });
+      picks.push({ lat_rounded: App.util.roundCoord(loc.lat), lon_rounded: App.util.roundCoord(loc.lon) });
     }
     return picks;
   }
@@ -124,7 +119,7 @@ App.geo = (function () {
           resolve({
             ok: true,
             lat_rounded: App.util.roundCoord(pos.coords.latitude),
-            lon_rounded: App.util.roundLon(pos.coords.longitude),
+            lon_rounded: App.util.roundCoord(pos.coords.longitude),
           });
         },
         (err) => {
@@ -201,7 +196,7 @@ App.geo = (function () {
     return {
       ok: true,
       lat_rounded: App.util.roundCoord(location.lat),
-      lon_rounded: App.util.roundLon(location.lon),
+      lon_rounded: App.util.roundCoord(location.lon),
       location,
     };
   }

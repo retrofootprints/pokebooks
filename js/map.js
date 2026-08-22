@@ -1,46 +1,49 @@
-// Encounter density map. Renders Portugal with the 0.1-degree cells that
-// contain encounters shaded by how many.
+// Encounter density map. Renders Portugal with the CELL_LAT x CELL_LON
+// cells that contain encounters shaded by how many.
 //
-// Two things here are deliberate and easy to get wrong if edited:
+// Three things here are deliberate and easy to get wrong if edited:
 //
-// 1. CELLS ARE CENTRED, NOT CORNER-ANCHORED. App.util.roundCoord is
-//    Math.round(n * 10) / 10, so a stored 39.5 means a cell *centred* on
-//    39.5, spanning 39.45-39.55. Each rect spans value +/- 0.05. Drawing
-//    value -> value + 0.1 would shift every cell half a cell north-east.
+// 1. CELLS ARE CENTRED, NOT CORNER-ANCHORED. App.util.roundCoord/roundLon
+//    round to the nearest grid point, so a stored 39.5 means a cell
+//    *centred* on 39.5, spanning +/- half a step. Each rect spans
+//    value +/- HALF_LAT (or HALF_LON). Drawing value -> value + CELL_LAT/
+//    CELL_LON would shift every cell half a cell north-east.
 //
-// 2. CELLS, NEVER POINTS. The stored precision IS 0.1 degrees (~11km N-S at
-//    Portuguese latitudes) because the spec requires the true coordinate is
-//    never stored. Drawing a dot would imply a precision that was
-//    deliberately discarded — the mark must stay cell-sized.
+// 2. CELLS, NEVER POINTS. The stored precision exists because the spec
+//    requires the true coordinate is never stored. Drawing a dot would
+//    imply a precision that was deliberately discarded — the mark must
+//    stay cell-sized.
 //
-// 3. THE MARK IS A SQUARE INSCRIBED IN THE CELL, NOT THE CELL ITSELF. A
-//    0.1x0.1 degree bin is not square on the ground: a degree of longitude
-//    shrinks by cos(latitude), so at Portuguese latitudes the cell is
-//    ~11.1km tall but only ~8.5km wide, and drawing its true footprint
-//    (which this used to do) renders visibly tall rectangles — measured
-//    w/h 0.771 on the mainland, 0.784 Azores, 0.841 Madeira. Squares were
-//    an explicit request. svgFor therefore draws the largest square that
-//    FITS INSIDE the true cell (side = min(w, h) = the cell's width),
-//    vertically centred on it.
-//    Two consequences, both deliberate:
-//      - Vertically adjacent cells show a gap of ~23% of the cell height.
-//        Unavoidable when drawing squares on a non-square lattice; the
-//        alternative (side = max) would overlap horizontal neighbours and
-//        visually merge distinct cells, which is worse.
-//      - The mark is narrower in latitude than the bin, so it slightly
-//        OVERSTATES N-S precision (implies +/-4.25km where the stored truth
-//        is +/-5.55km). It never extends beyond the real cell, and stored
-//        and exported coordinates are unchanged and still truthful — but
-//        this is a legibility choice, so don't read the drawn extent as the
-//        privacy boundary. The stored 0.1 degree bin is.
+// 3. LAT AND LON ROUND TO DIFFERENT STEPS, ON PURPOSE. A degree of
+//    longitude shrinks by cos(latitude), so a 0.1x0.1 degree bin isn't
+//    square on the ground at Portuguese latitudes — it was ~11.1km tall
+//    but only ~8.5km wide, and drawing that true footprint (the original
+//    version of this file) rendered visibly tall rectangles (measured w/h
+//    0.771 mainland). Rather than force a square shape onto a mismatched
+//    grid, App.util.roundLon rounds longitude to 0.13 degrees instead of
+//    0.1 — see its comment in js/util.js for the exact reasoning — which
+//    makes the true footprint ~11x11km and ~0.2% off-square on the
+//    mainland, the region where most encounters will fall.
+//    Madeira/Azores are far enough from the reference latitude that even
+//    0.13 degrees leaves them a few percent off-square (measured: Madeira
+//    ~9%, Azores ~2%), so svgFor still draws the largest square that FITS
+//    INSIDE the true cell (side = min(w, h)), centred, as a backstop —
+//    now a small residual correction rather than doing most of the work.
+//    It never extends beyond the real cell, and stored/exported
+//    coordinates are exactly what's shown — this is purely a legibility
+//    choice on top of an already-near-square grid.
 window.App = window.App || {};
 
 App.map = (function () {
   const t = App.i18n.t;
   const tn = App.i18n.tn;
   const OUTLINE_URL = "assets/portugal-outline.json";
-  const CELL = 0.1; // degrees, matches App.util.roundCoord's precision
-  const HALF = CELL / 2;
+  // Matches App.util.roundCoord (lat) / App.util.roundLon (lon) — see the
+  // header comment above for why these differ.
+  const CELL_LAT = 0.1;
+  const CELL_LON = 0.13;
+  const HALF_LAT = CELL_LAT / 2;
+  const HALF_LON = CELL_LON / 2;
 
   // Sequential ramp, light->dark. Validated with the dataviz ordinal checks
   // (monotone lightness, adjacent dL >= 0.06, light-end contrast 2.23:1 on
@@ -172,10 +175,10 @@ App.map = (function () {
   function boundsFor(group, cells, padFrac) {
     let [lon0, lat0, lon1, lat1] = group.bbox;
     cells.forEach((c) => {
-      lon0 = Math.min(lon0, c.lon - HALF);
-      lon1 = Math.max(lon1, c.lon + HALF);
-      lat0 = Math.min(lat0, c.lat - HALF);
-      lat1 = Math.max(lat1, c.lat + HALF);
+      lon0 = Math.min(lon0, c.lon - HALF_LON);
+      lon1 = Math.max(lon1, c.lon + HALF_LON);
+      lat0 = Math.min(lat0, c.lat - HALF_LAT);
+      lat1 = Math.max(lat1, c.lat + HALF_LAT);
     });
     const padX = (lon1 - lon0) * padFrac;
     const padY = (lat1 - lat0) * padFrac;
@@ -203,17 +206,21 @@ App.map = (function () {
     const land = pathFor(group.polygons, proj);
 
     // The cell's true footprint, then the largest square that fits inside
-    // it, vertically centred — see point 3 of the header comment for why
-    // the mark is a square rather than the footprint itself.
-    const w = proj.lenX(CELL);
-    const h = proj.len(CELL);
+    // it, centred — see point 3 of the header comment for why the mark is
+    // a square rather than the footprint itself. Which dimension is the
+    // limiting one (and so which gets an inset) varies by group: the
+    // mainland's footprint is already ~square, Madeira/Azores are still a
+    // few percent off in one direction or the other.
+    const w = proj.lenX(CELL_LON);
+    const h = proj.len(CELL_LAT);
     const side = Math.min(w, h);
+    const xInset = (w - side) / 2;
     const yInset = (h - side) / 2;
 
     const rects = cells
       .map((c) => {
-        const x = proj.x(c.lon - HALF) + (w - side) / 2;
-        const y = proj.y(c.lat + HALF) + yInset;
+        const x = proj.x(c.lon - HALF_LON) + xInset;
+        const y = proj.y(c.lat + HALF_LAT) + yInset;
         return (
           `<rect class="map-cell" x="${x.toFixed(1)}" y="${y.toFixed(1)}" ` +
           `width="${side.toFixed(1)}" height="${side.toFixed(1)}" ` +

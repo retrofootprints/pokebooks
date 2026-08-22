@@ -22,11 +22,17 @@ for ("Porto", "Sintra", "Cascais"). Freguesias still matter for real
 neighborhood/small-town recall beyond the municipal seat. So: both, one
 combined, de-duplicated list.
 
-Every coordinate in the output is rounded the same way GPS readings are
-(App.util.roundCoord, i.e. round to 1 decimal / ~11km) — a manual pick and
-a real GPS fix are stored identically, so there's no precision advantage to
-recover here; the rounding just keeps the committed file's numbers as small
-as the app will ever actually use them.
+Every coordinate in the output is pre-rounded to 1 decimal (round_coord
+below), same precision as App.util.roundCoord — a manual pick and a real
+GPS fix end up in the same ballpark of precision, so there's no advantage
+to shipping more digits here; it just keeps the committed file's numbers
+small. NOTE: since js/geo.js started rounding longitude to 0.13 degrees
+(App.util.roundLon, not the same step as latitude — see that function's
+comment for why) rather than 0.1, this file's 0.1-rounded longitudes get
+rounded a second time at save. Harmless (every picked location still lands
+in the correct 0.13 bucket) but not exact — if this script's own
+precision ever needs to match app precision exactly, round_coord's 1
+decimal here is coarser than necessary for longitude specifically.
 
 Usage:
     python scripts/build_locations.py

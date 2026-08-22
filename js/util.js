@@ -264,8 +264,31 @@ App.util = (function () {
     return check === Number(digits[12]);
   }
 
+  // Latitude rounding: 0.1 degree (~11.1km at any latitude — a degree of
+  // latitude is nearly constant). Used for lat_rounded everywhere.
   function roundCoord(n) {
     return Math.round(n * 10) / 10;
+  }
+
+  // Longitude rounding: 0.13 degree, not 0.1. A degree of longitude
+  // shrinks by cos(latitude), so at Portuguese latitudes 0.1 degree of
+  // longitude is only ~8.5km against 0.1 degree of latitude's ~11.1km —
+  // cells were visibly tall rectangles on the map (measured w/h 0.771
+  // mainland). 0.13 was chosen specifically to close that gap: it renders
+  // ~11x11km cells and ~0.2% off-square on the mainland (see js/map.js).
+  // Madeira/Azores are further from the reference latitude and still land
+  // a few percent off-square even at this step — js/map.js additionally
+  // draws an inscribed square as a backstop, so this value doesn't need to
+  // be exact everywhere, just close on the mainland where most encounters
+  // will fall.
+  //
+  // LON_STEP itself isn't exactly representable in binary floating point
+  // (0.13 * 7 === 0.9099999999999999), so the result is rounded to 2
+  // decimals after snapping to the grid — LON_STEP's own precision — to
+  // keep stored/exported values clean rather than carrying that noise.
+  const LON_STEP = 0.13;
+  function roundLon(n) {
+    return Math.round((Math.round(n / LON_STEP) * LON_STEP) * 100) / 100;
   }
 
   function toast(msg, ms) {
@@ -300,6 +323,6 @@ App.util = (function () {
     stripDiacritics, normText, onlyDigitsX,
     validIsbn13, validIsbn10, isbn10ToIsbn13, isbn13ToIsbn10,
     extractIsbnFromText, extractDLFromText, extractFichaTecnicaFields, validEan13,
-    roundCoord, toast, fmtDate, blobToBase64, base64ToBlob, dlNumber,
+    roundCoord, roundLon, toast, fmtDate, blobToBase64, base64ToBlob, dlNumber,
   };
 })();

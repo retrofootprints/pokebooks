@@ -20,7 +20,7 @@ App.i18n = (function () {
       navMap: "Map",
       navStats: "Stats",
 
-      btnScanBook: "Scan book",
+      btnScanBook: "Log a book",
       btnCapturePhoto: "Capture photo",
       btnCancel: "Cancel",
       btnSearch: "Search",
@@ -37,6 +37,7 @@ App.i18n = (function () {
 
       manualHeadingLog: "Log this encounter",
       manualHeadingConfirm: "Confirm details",
+      resultIdPhotoCaption: "Used for identification",
 
       fieldTitle: "Title",
       fieldAuthor: "Author",
@@ -103,7 +104,8 @@ App.i18n = (function () {
       discoveryGridUnavailable: "Discovery grid data unavailable.",
       noContextYet: "No context data yet.",
 
-      statusScanPrompt: "Point at a barcode, or tap Capture to photograph the page.",
+      statusEncounterPrompt: "Take a photo of the book you found.",
+      statusIdentifyPrompt: "Now flip it over — show the barcode or the copyright page.",
       statusCameraUnavailable: "Camera unavailable: {msg}",
       statusReadingText: "Reading text (this can take a few seconds)…",
       statusTryingRotation: "Reading text — that angle didn't work, trying another orientation ({i}/{total})…",
@@ -114,6 +116,7 @@ App.i18n = (function () {
       toastNotBookBarcode: "Not a book barcode (rejected): {raw}",
       toastCaptureFailed: "Capture failed: {msg}",
       toastOcrFailed: "OCR failed: {msg} — you can still log it by hand.",
+      toastEncounterCaptured: "Nice find! Now let's identify it.",
       toastEncounterSaved: "Encounter saved.",
       toastEncounterSavedNoLocation: "Encounter saved (no location: {reason}).",
       locationReasonDenied: "permission denied",
@@ -168,7 +171,7 @@ App.i18n = (function () {
       navMap: "Mapa",
       navStats: "Estatísticas",
 
-      btnScanBook: "Digitalizar livro",
+      btnScanBook: "Registar um livro",
       btnCapturePhoto: "Capturar foto",
       btnCancel: "Cancelar",
       btnSearch: "Pesquisar",
@@ -185,6 +188,7 @@ App.i18n = (function () {
 
       manualHeadingLog: "Registar este encontro",
       manualHeadingConfirm: "Confirmar detalhes",
+      resultIdPhotoCaption: "Usada para identificação",
 
       fieldTitle: "Título",
       fieldAuthor: "Autor",
@@ -251,7 +255,8 @@ App.i18n = (function () {
       discoveryGridUnavailable: "Dados da grelha de descoberta indisponíveis.",
       noContextYet: "Ainda não há dados de contexto.",
 
-      statusScanPrompt: "Aponte a um código de barras, ou toque em Capturar para fotografar a página.",
+      statusEncounterPrompt: "Tire uma foto do livro que encontrou.",
+      statusIdentifyPrompt: "Agora vire-o — mostre o código de barras ou a página de ficha técnica.",
       statusCameraUnavailable: "Câmara indisponível: {msg}",
       statusReadingText: "A ler texto (pode demorar alguns segundos)…",
       statusTryingRotation: "A ler texto — esse ângulo não resultou, a tentar outra orientação ({i}/{total})…",
@@ -262,6 +267,7 @@ App.i18n = (function () {
       toastNotBookBarcode: "Não é um código de barras de livro (rejeitado): {raw}",
       toastCaptureFailed: "Falha na captura: {msg}",
       toastOcrFailed: "Falha no OCR: {msg} — pode registar na mesma manualmente.",
+      toastEncounterCaptured: "Boa descoberta! Agora vamos identificá-lo.",
       toastEncounterSaved: "Encontro guardado.",
       toastEncounterSavedNoLocation: "Encontro guardado (sem localização: {reason}).",
       locationReasonDenied: "permissão negada",

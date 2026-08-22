@@ -108,6 +108,10 @@ App.idb = (function () {
         copy.photo_base64 = await App.util.blobToBase64(copy.photo_blob);
         delete copy.photo_blob;
       }
+      if (copy.id_photo_blob instanceof Blob) {
+        copy.id_photo_base64 = await App.util.blobToBase64(copy.id_photo_blob);
+        delete copy.id_photo_blob;
+      }
       out.push(copy);
     }
     return {
@@ -129,6 +133,10 @@ App.idb = (function () {
       if (record.photo_base64) {
         record.photo_blob = await App.util.base64ToBlob(record.photo_base64);
         delete record.photo_base64;
+      }
+      if (record.id_photo_base64) {
+        record.id_photo_blob = await App.util.base64ToBlob(record.id_photo_base64);
+        delete record.id_photo_base64;
       }
       await addEncounter(record);
       imported++;

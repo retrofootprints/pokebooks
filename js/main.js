@@ -6,6 +6,14 @@
   let currentDraft = null;
   let activeScan = null; // { cancel() } from barcode.startScanLoop, while scanning
 
+  // Two-stage capture session state. "encounter" is the keepsake photo of
+  // the book as found (always taken first, always kept, regardless of how
+  // — or whether — identification succeeds); "identify" is the existing
+  // barcode/OCR flow, entered only after the keepsake shot. See
+  // startScanFlow/encounterPhotoCaptured/beginIdentifyStage below.
+  let captureStage = null; // "encounter" | "identify" | null
+  let pendingEncounterPhoto = null;
+
   const videoEl = document.getElementById("camera-video");
   const canvasEl = document.getElementById("camera-canvas");
   const cameraWrap = document.getElementById("camera-wrap");
@@ -59,37 +67,75 @@
     }
     App.capture.stopCamera();
     hideCameraUI();
+    captureStage = null;
+    pendingEncounterPhoto = null;
   }
 
-  // --- Scan: one flow covering rungs 1-4 ---
+  // --- Scan: keepsake photo first, then identification (rungs 1-4) ---
   //
-  // A single camera session now does both jobs at once, rather than
-  // making the user pre-choose "barcode" vs "photo" before they know
-  // whether the book even has a barcode. Barcode detection runs
-  // continuously in the background the whole time the camera is open
-  // (cheap — one detect() call per frame); the shutter button to capture
-  // the page for OCR is available the entire time too, not gated behind a
-  // separate mode. Whichever resolves first wins: a valid Bookland barcode
-  // jumps straight to rung 1, or the user can tap the shutter at any point
-  // to go the OCR route (rungs 2-4) — useful the moment they can see there's
-  // no barcode, or the book predates barcodes entirely.
+  // Two stages in one continuous camera session — the stream only opens
+  // once; moving between stages is just a status-line/shutter-behaviour
+  // change, not a re-init. Stage 1 ("encounter") is a single deliberate
+  // shutter tap for the book as found — always kept as the encounter's
+  // photo_blob, regardless of what identification does next (previously,
+  // a barcode-only resolution kept no photo at all, since barcode
+  // detection reads the live stream rather than a captured frame — this
+  // fixes that too). Stage 2 ("identify") is the pre-existing flow:
+  // barcode detection runs continuously in the background (cheap — one
+  // detect() call per frame) while the shutter becomes available for an
+  // OCR capture; whichever resolves first wins. See shutterClicked,
+  // beginIdentifyStage.
   async function startScanFlow() {
     try {
       showCameraUI();
-      setStatus(App.i18n.t("statusScanPrompt"));
+      captureStage = "encounter";
+      pendingEncounterPhoto = null;
+      setStatus(App.i18n.t("statusEncounterPrompt"));
       await App.capture.startCamera(videoEl);
     } catch (err) {
       setStatus(App.i18n.t("statusCameraUnavailable", { msg: err.message }));
       hideCameraUI();
+      captureStage = null;
       return;
     }
+    // No barcode loop yet — starts once the keepsake photo is captured,
+    // see beginIdentifyStage.
+  }
 
+  function shutterClicked() {
+    return captureStage === "encounter" ? encounterPhotoCaptured() : identificationPhotoCaptured();
+  }
+
+  async function encounterPhotoCaptured() {
+    let blob;
+    try {
+      blob = await App.capture.capturePhotoBlob(videoEl);
+    } catch (err) {
+      App.util.toast(App.i18n.t("toastCaptureFailed", { msg: err.message }));
+      return;
+    }
+    pendingEncounterPhoto = blob;
+    App.util.toast(App.i18n.t("toastEncounterCaptured"));
+    beginIdentifyStage();
+  }
+
+  function beginIdentifyStage() {
+    captureStage = "identify";
+    setStatus(App.i18n.t("statusIdentifyPrompt"));
     activeScan = App.barcode.startScanLoop(videoEl, canvasEl, {
       onBook: async (isbn13) => {
+        // Barcode resolution reads the live stream, not a captured frame —
+        // grab one still shot now (before the stream stops) purely so this
+        // rung also keeps an identification photo, same as the OCR rungs.
+        // Best-effort: a capture failure here shouldn't block resolving
+        // the book itself, so it's swallowed to null rather than surfaced.
+        const idPhoto = await App.capture.capturePhotoBlob(videoEl).catch(() => null);
+        const keepsake = pendingEncounterPhoto;
         await stopEverything();
         setStatus("");
         App.util.toast(App.i18n.t("toastLookingUp", { isbn: isbn13 }));
-        const draft = await App.ladder.resolveFromBarcode(isbn13);
+        const draft = await App.ladder.resolveFromBarcode(isbn13, idPhoto);
+        draft.photo_blob = keepsake;
         currentDraft = draft;
         App.ui.renderResult(draft);
         wireResultButtons();
@@ -102,30 +148,33 @@
     });
   }
 
-  async function shutterClicked() {
-    // Two captures from the same frame: storedBlob is what gets saved/shown
-    // (small, resized — capturePhotoBlob), ocrBlob is a full-resolution
-    // capture OCR actually reads (captureHighResBlob). Both are grabbed
-    // before stopEverything() stops the stream.
-    let storedBlob, ocrBlob;
+  async function identificationPhotoCaptured() {
+    // Two captures from the same frame: idPhotoBlob is what gets saved/
+    // shown as the identification photo (small, resized —
+    // capturePhotoBlob), ocrBlob is a full-resolution capture OCR actually
+    // reads (captureHighResBlob). Both are grabbed before stopEverything()
+    // stops the stream.
+    let idPhotoBlob, ocrBlob;
     try {
-      storedBlob = await App.capture.capturePhotoBlob(videoEl);
+      idPhotoBlob = await App.capture.capturePhotoBlob(videoEl);
       ocrBlob = await App.capture.captureHighResBlob(videoEl);
     } catch (err) {
       App.util.toast(App.i18n.t("toastCaptureFailed", { msg: err.message }));
       return;
     }
+    const keepsake = pendingEncounterPhoto;
     await stopEverything();
     setStatus(App.i18n.t("statusReadingText"));
     App.ui.showView("capture"); // stay put but show progress via status line
     try {
-      const draft = await App.ladder.resolveFromPhoto(storedBlob, ocrBlob, (deg, i, total) => {
+      const draft = await App.ladder.resolveFromPhoto(idPhotoBlob, ocrBlob, (deg, i, total) => {
         setStatus(
           i === 0
             ? App.i18n.t("statusReadingText")
             : App.i18n.t("statusTryingRotation", { i: i + 1, total })
         );
       });
+      draft.photo_blob = keepsake;
       currentDraft = draft;
       setStatus("");
       App.ui.renderResult(draft);
@@ -135,7 +184,7 @@
     } catch (err) {
       setStatus("");
       App.util.toast(App.i18n.t("toastOcrFailed", { msg: err.message }));
-      currentDraft = App.ladder.resolveManual(storedBlob);
+      currentDraft = App.ladder.resolveManual(keepsake, idPhotoBlob);
       openManualForm();
     }
   }
@@ -263,6 +312,7 @@
       location_source: loc.ok ? loc.source || null : null,
       note: (extra && extra.note) || null,
       photo_blob: draft.photo_blob || null,
+      id_photo_blob: draft.id_photo_blob || null,
       confirmed: true,
     };
     const id = await App.idb.addEncounter(record);

@@ -126,6 +126,18 @@ App.ui = (function () {
     if (draft.photo_blob) {
       html += `<img class="result-photo" src="${blobUrl(draft.photo_blob)}">`;
     }
+    // Secondary, small — the barcode/copyright-page shot actually used for
+    // identification, kept per the spec's "keep every photo" rule but not
+    // given the same visual weight as the encounter's own keepsake photo
+    // above. Absent for barcode resolutions where the capture failed, and
+    // always absent for rung 5 (log it anyway).
+    if (draft.id_photo_blob) {
+      html +=
+        `<div class="result-id-photo">` +
+        `<img src="${blobUrl(draft.id_photo_blob)}">` +
+        `<span class="cap">${escapeHtml(t("resultIdPhotoCaption"))}</span>` +
+        `</div>`;
+    }
 
     html += `<div style="margin-bottom:0.5rem">`;
     html += `<span class="rung-badge rung-${draft.resolution_rung}">${escapeHtml(rungLabel(draft.resolution_rung))}</span>`;

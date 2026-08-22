@@ -354,6 +354,10 @@ button.btn:disabled { opacity: 0.5; cursor: default; }
   display: block;
 }
 
+.result-id-photo { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; }
+.result-id-photo img { width: 3.2rem; height: 3.2rem; object-fit: cover; border-radius: 6px; flex-shrink: 0; background: var(--border); }
+.result-id-photo .cap { font-size: 0.8rem; color: var(--muted); }
+
 .field-row { display: flex; justify-content: space-between; gap: 1rem; padding: 0.3rem 0; border-bottom: 1px solid var(--border); }
 .field-row:last-child { border-bottom: none; }
 .field-row .k { color: var(--muted); font-size: 0.85rem; }

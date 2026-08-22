@@ -243,6 +243,24 @@ correctly re-labels every existing encounter, not just new ones.
   first wins. This removes a decision the user usually can't make in
   advance anyway (you don't know if a given book has a barcode until you
   look). See `startScanFlow` in `js/main.js`.
+- **Capture is two stages, one continuous camera session: the keepsake
+  photo, then identification.** Tapping "Log a book" opens the camera and
+  asks for a single photo of the book as found — that's the encounter's
+  `photo_blob`, always kept, regardless of how (or whether) identification
+  succeeds afterward. Only once that's taken does the barcode loop start
+  and the shutter switch to the identification capture (barcode/copyright
+  page), exactly as the single-flow behavior above — the camera stream
+  itself never closes and reopens between the two stages, just the status
+  line and shutter behavior change. This closed two real gaps: previously
+  a barcode-only resolution (rung 1) kept no photo at all (barcode
+  detection reads the live stream, not a captured frame), and there was no
+  way to attach a photo to a "log it anyway" (rung 5) encounter at all.
+  **Both photos are kept**, as two separate fields — `photo_blob` (the
+  keepsake, shown large everywhere) and `id_photo_blob` (the barcode/
+  copyright-page shot, shown small on the result view captioned "Used for
+  identification") — per the spec's "keep every photo, including from
+  failed resolutions." See `startScanFlow`/`encounterPhotoCaptured`/
+  `beginIdentifyStage`/`identificationPhotoCaptured` in `js/main.js`.
 
 ## Repo layout
 

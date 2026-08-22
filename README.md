@@ -161,6 +161,25 @@ correctly re-labels every existing encounter, not just new ones.
   Safari reports `prompt` even when the site permission is set to Deny. It's
   used only to skip re-asking when it says `granted`; a real
   `getCurrentPosition` error is the only reliable signal.
+- **Map cells are drawn as squares inscribed in the bin, not as the bin's
+  true footprint.** A 0.1°×0.1° bin isn't square on the ground — a degree of
+  longitude shrinks by cos(latitude), so at Portuguese latitudes the cell is
+  ~11.1 km tall but only ~8.5 km wide, and drawing the real footprint (which
+  `js/map.js` used to do) renders visibly tall rectangles: measured w/h 0.771
+  mainland, 0.784 Azores, 0.841 Madeira. Squares were an explicit request, so
+  `svgFor` now draws the largest square that fits *inside* the true cell
+  (`side = min(w, h)`), vertically centred. Two deliberate consequences:
+  vertically adjacent cells show a ~23% gap (unavoidable when drawing squares
+  on a non-square lattice — the alternative, `max`, would overlap horizontal
+  neighbours and visually merge distinct cells), and the mark slightly
+  **overstates N–S precision** (implies ±4.25 km where the stored truth is
+  ±5.55 km). The mark never extends beyond the real cell, and stored/exported
+  coordinates are completely unchanged — but the drawn extent is a legibility
+  choice, so the stored 0.1° bin, not the square, is the privacy boundary.
+  Alternatives considered and declined: widening the longitude bin to 0.13°
+  (would make cells square on screen *and* ~11×11 km on the ground, at the
+  cost of changing stored data), and binning in a metric projection
+  (ETRS89/PT-TM06) for exact equal-area squares.
 - **Location permission used to fail silently.** `js/geo.js`'s
   `getRoundedLocation()` originally swallowed any geolocation failure into
   a bare `null`, so an encounter saved with permission denied (or timed

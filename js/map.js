@@ -11,28 +11,8 @@
 // 2. CELLS, NEVER POINTS. The stored precision IS 0.1 degrees (~11km N-S at
 //    Portuguese latitudes) because the spec requires the true coordinate is
 //    never stored. Drawing a dot would imply a precision that was
-//    deliberately discarded — the mark must stay cell-sized.
-//
-// 3. THE MARK IS A SQUARE INSCRIBED IN THE CELL, NOT THE CELL ITSELF. A
-//    0.1x0.1 degree bin is not square on the ground: a degree of longitude
-//    shrinks by cos(latitude), so at Portuguese latitudes the cell is
-//    ~11.1km tall but only ~8.5km wide, and drawing its true footprint
-//    (which this used to do) renders visibly tall rectangles — measured
-//    w/h 0.771 on the mainland, 0.784 Azores, 0.841 Madeira. Squares were
-//    an explicit request. svgFor therefore draws the largest square that
-//    FITS INSIDE the true cell (side = min(w, h) = the cell's width),
-//    vertically centred on it.
-//    Two consequences, both deliberate:
-//      - Vertically adjacent cells show a gap of ~23% of the cell height.
-//        Unavoidable when drawing squares on a non-square lattice; the
-//        alternative (side = max) would overlap horizontal neighbours and
-//        visually merge distinct cells, which is worse.
-//      - The mark is narrower in latitude than the bin, so it slightly
-//        OVERSTATES N-S precision (implies +/-4.25km where the stored truth
-//        is +/-5.55km). It never extends beyond the real cell, and stored
-//        and exported coordinates are unchanged and still truthful — but
-//        this is a legibility choice, so don't read the drawn extent as the
-//        privacy boundary. The stored 0.1 degree bin is.
+//    deliberately discarded. Rendering at exactly the stored granularity is
+//    the privacy guarantee, not a styling preference.
 window.App = window.App || {};
 
 App.map = (function () {
@@ -202,21 +182,15 @@ App.map = (function () {
     const proj = makeProjection(boundsFor(group, cells, padFrac), targetWidth);
     const land = pathFor(group.polygons, proj);
 
-    // The cell's true footprint, then the largest square that fits inside
-    // it, vertically centred — see point 3 of the header comment for why
-    // the mark is a square rather than the footprint itself.
-    const w = proj.lenX(CELL);
-    const h = proj.len(CELL);
-    const side = Math.min(w, h);
-    const yInset = (h - side) / 2;
-
     const rects = cells
       .map((c) => {
-        const x = proj.x(c.lon - HALF) + (w - side) / 2;
-        const y = proj.y(c.lat + HALF) + yInset;
+        const x = proj.x(c.lon - HALF);
+        const y = proj.y(c.lat + HALF);
+        const w = proj.lenX(CELL);
+        const h = proj.len(CELL);
         return (
           `<rect class="map-cell" x="${x.toFixed(1)}" y="${y.toFixed(1)}" ` +
-          `width="${side.toFixed(1)}" height="${side.toFixed(1)}" ` +
+          `width="${w.toFixed(1)}" height="${h.toFixed(1)}" ` +
           `fill="${colorFor(c.count, bins)}"><title>${c.count} encounter${c.count === 1 ? "" : "s"}</title></rect>`
         );
       })

@@ -173,6 +173,17 @@
     </div>
   </section>
 
+  <!-- ===================== ENCOUNTER DETAIL VIEW =====================
+       Full record for one logged encounter. A view rather than a modal:
+       the content is photo-heavy and long, and this reuses the same
+       showView machinery as the result/manual views instead of needing
+       backdrop / scroll-lock / focus-trap infrastructure the app doesn't
+       have. -->
+  <section id="view-detail" class="view">
+    <button type="button" class="btn small" id="btn-detail-back" data-i18n="btnBack">Back</button>
+    <div class="card" id="detail-card"></div>
+  </section>
+
   <!-- ===================== MAP VIEW ===================== -->
   <section id="view-map" class="view">
     <h2 data-i18n="mapHeading">Map</h2>

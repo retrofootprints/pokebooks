@@ -592,6 +592,103 @@
     syncLogChrome();
   }
 
+  // --- Encounter detail ---
+  let detailId = null;
+  let logScrollY = 0;
+
+  function openEncounterDetail(id) {
+    const encounter = lastLoadedEncounters.find((e) => e.id === id);
+    if (!encounter) return;
+    detailId = id;
+    logScrollY = window.scrollY; // restored on Back, so the list doesn't jump
+    App.ui.renderEncounterDetail(encounter);
+    const del = document.getElementById("btn-detail-delete");
+    if (del) {
+      del.addEventListener("click", async () => {
+        const id = detailId;
+        closeEncounterDetail();
+        await deleteEncounterIds([id]);
+      });
+    }
+    App.ui.showView("detail");
+    window.scrollTo(0, 0);
+  }
+
+  function closeEncounterDetail() {
+    detailId = null;
+    App.ui.showView("log");
+    // Wait a frame: the log section is display:none until showView runs, so
+    // it has no scroll height to restore into yet.
+    requestAnimationFrame(() => window.scrollTo(0, logScrollY));
+  }
+
+  // --- Swipe-to-reveal delete ---
+  //
+  // Touch only, and deliberately not the only way to delete one record —
+  // the detail view's Delete button covers pointer/keyboard, and select
+  // mode covers bulk. See the README note.
+  //
+  // The axis lock is the important part: until the gesture is clearly more
+  // horizontal than vertical it must do nothing at all, or the list stops
+  // scrolling properly under the thumb.
+  const SWIPE_W = 76; // must match .log-row-del width in styles.css
+  let swipe = null;
+
+  function closeOpenRows(except) {
+    document.querySelectorAll("#log-list .log-row.open").forEach((r) => {
+      if (r !== except) r.classList.remove("open");
+    });
+  }
+
+  function onLogTouchStart(ev) {
+    if (logState.selectMode || ev.touches.length !== 1) return;
+    const row = ev.target.closest(".log-row");
+    if (!row) return;
+    swipe = {
+      row,
+      startX: ev.touches[0].clientX,
+      startY: ev.touches[0].clientY,
+      base: row.classList.contains("open") ? -SWIPE_W : 0,
+      axis: null, // null = undecided, "x" = swiping, "y" = let it scroll
+    };
+  }
+
+  function onLogTouchMove(ev) {
+    if (!swipe) return;
+    const dx = ev.touches[0].clientX - swipe.startX;
+    const dy = ev.touches[0].clientY - swipe.startY;
+    if (swipe.axis === null) {
+      if (Math.abs(dy) > 8 && Math.abs(dy) >= Math.abs(dx)) {
+        swipe = null; // vertical: hand it back to the scroller untouched
+        return;
+      }
+      if (Math.abs(dx) > 8) swipe.axis = "x";
+      else return;
+    }
+    ev.preventDefault(); // now we own the gesture
+    const offset = Math.max(-SWIPE_W, Math.min(0, swipe.base + dx));
+    swipe.row.querySelector(".log-entry").style.transform = `translateX(${offset}px)`;
+    swipe.moved = true;
+  }
+
+  function onLogTouchEnd() {
+    if (!swipe) return;
+    const { row } = swipe;
+    const entry = row.querySelector(".log-entry");
+    if (swipe.axis === "x") {
+      const offset = parseFloat((entry.style.transform.match(/-?[\d.]+/) || [0])[0]) || 0;
+      const open = offset < -SWIPE_W * 0.5;
+      entry.style.transform = ""; // hand back to the CSS class
+      row.classList.toggle("open", open);
+      if (open) closeOpenRows(row);
+      // Suppress the click that follows this gesture, so a swipe never
+      // also opens the detail view.
+      row.dataset.swiped = "1";
+      setTimeout(() => delete row.dataset.swiped, 350);
+    }
+    swipe = null;
+  }
+
   // The single delete path for both one row and a bulk selection. Records
   // are captured before the delete so undo can put them back verbatim.
   async function deleteEncounterIds(ids) {
@@ -771,16 +868,36 @@
       deleteEncounterIds(Array.from(logState.selectedIds));
     });
 
-    document.getElementById("log-list").addEventListener("click", (e) => {
+    const logList = document.getElementById("log-list");
+    logList.addEventListener("click", (e) => {
       const del = e.target.closest("[data-del]");
       if (del) {
         deleteEncounterIds([Number(del.dataset.del)]);
         return;
       }
-      if (!logState.selectMode) return; // rows are inert outside select mode
-      const row = e.target.closest(".log-entry");
-      if (row) toggleLogSelection(Number(row.dataset.id));
+      const row = e.target.closest(".log-row");
+      if (!row) return;
+      if (logState.selectMode) {
+        toggleLogSelection(Number(row.dataset.id));
+        return;
+      }
+      if (row.dataset.swiped) return; // this click is the tail of a swipe
+      if (row.classList.contains("open")) {
+        row.classList.remove("open"); // tapping an open row closes it
+        return;
+      }
+      if (document.querySelector("#log-list .log-row.open")) {
+        closeOpenRows(null); // first tap just dismisses whatever was open
+        return;
+      }
+      openEncounterDetail(Number(row.dataset.id));
     });
+    logList.addEventListener("touchstart", onLogTouchStart, { passive: true });
+    logList.addEventListener("touchmove", onLogTouchMove, { passive: false });
+    logList.addEventListener("touchend", onLogTouchEnd, { passive: true });
+    logList.addEventListener("touchcancel", onLogTouchEnd, { passive: true });
+
+    document.getElementById("btn-detail-back").addEventListener("click", closeEncounterDetail);
 
     document.getElementById("btn-seed-random").addEventListener("click", seedRandomLocationsClicked);
 

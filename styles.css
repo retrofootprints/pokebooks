@@ -500,23 +500,42 @@ form.manual-form textarea { min-height: 4rem; resize: vertical; }
 .log-selectbar { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.6rem; }
 .log-selectbar .danger { margin-left: auto; }
 .log-count { color: var(--muted); font-size: 0.8rem; margin-bottom: 0.5rem; }
-.log-entry { display: flex; gap: 0.75rem; padding: 0.75rem; border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 0.5rem; align-items: center; }
+/* Swipe container: the delete action sits behind the row and is only
+   reachable once the row slides left. overflow:hidden keeps it clipped, and
+   the row's own opaque background is what hides it when closed. */
+.log-row { position: relative; overflow: hidden; border-radius: var(--radius); margin-bottom: 0.5rem; }
+.log-row-del {
+  position: absolute;
+  top: 0; right: 0; bottom: 0;
+  width: 76px; /* keep in sync with SWIPE_W in js/main.js */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: var(--danger);
+  color: #fff;
+}
+.log-row-del .icon-trash { width: 22px; height: 22px; }
+.log-entry {
+  position: relative;
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  align-items: center;
+  background: var(--panel);
+  transition: transform 0.18s ease;
+  /* Let the browser handle vertical scrolling itself; only horizontal
+     gestures reach the swipe handlers. */
+  touch-action: pan-y;
+}
+.log-row.open .log-entry { transform: translateX(-76px); }
 .log-entry.selectable { cursor: pointer; }
 .log-entry.selected { border-color: var(--accent); background: #f2f7f5; }
-/* Per-row delete: present but recessive, so it reads as available without
-   competing with the row content. */
-.log-del {
-  flex-shrink: 0;
-  background: none;
-  border: none;
-  font: inherit;
-  font-size: 1.4rem;
-  line-height: 1;
-  color: var(--muted);
-  padding: 0.35rem 0.5rem;
-  border-radius: 6px;
-}
-.log-del:active { background: var(--border); color: var(--danger); }
+.icon-trash { width: 18px; height: 18px; flex-shrink: 0; }
+#btn-detail-delete { display: inline-flex; align-items: center; gap: 0.4rem; }
+#btn-detail-back { margin-bottom: 0.75rem; }
 .log-check {
   flex-shrink: 0;
   width: 1.35rem;

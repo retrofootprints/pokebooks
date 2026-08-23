@@ -304,7 +304,27 @@ correctly re-labels every existing encounter, not just new ones.
   that way if either is edited.
   Editing saved encounters is **not** implemented yet;
   `App.idb.updateEncounter` and `getEncounter` exist and are currently used
-  only by tests, ready for that pass.
+  only by tests, ready for that pass — the detail view is its natural home.
+- **Single delete is behind a left-swipe, and that is touch-only — so it is
+  deliberately not the only route.** Tapping a log row opens a **detail
+  view** (`#view-detail`, rendered by `App.ui.renderEncounterDetail`) with
+  the whole record: both photos, the publication line, identifiers, context,
+  notes, rounded coordinates with their source, and the timestamp. A
+  dedicated view rather than a modal because the content is photo-heavy and
+  long, and because the app already has this pattern (`view-result`,
+  `view-manual`) via a 7-line `showView`, whereas a modal would need
+  backdrop, scroll-lock, focus-trap and Escape handling that don't exist.
+  Deleting one encounter is reachable three ways: swipe a row left to reveal
+  a trash button then **tap it** (two deliberate actions — no
+  full-swipe-to-delete), the Delete button on the detail view (the
+  pointer/keyboard path), or select mode. All three route through the same
+  `deleteEncounterIds`, so all three get the undo toast.
+  **The swipe's axis lock is the fragile part:** until a drag is clearly
+  more horizontal than vertical (`|dx| > 8 && |dx| > |dy|`) the handler does
+  nothing at all and lets the list scroll. Getting that wrong makes the log
+  feel broken to scroll, so `data/check_log_detail_swipe.js` tests a
+  mostly-vertical drag explicitly. `SWIPE_W` in `js/main.js` must stay in
+  sync with `.log-row-del`'s width in `styles.css`.
 - **Identification awaits are guarded by a session token.** OCR takes
   seconds and a lookup can too, while the session can be torn down
   mid-flight (cancel, or navigating away). `sessionId` in `js/main.js` is

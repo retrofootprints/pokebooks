@@ -74,6 +74,20 @@ App.ui = (function () {
     return `<div class="field-row"><span class="k">${escapeHtml(k)}</span><span class="v">${escapeHtml(String(v))}</span></div>`;
   }
 
+  // Inline SVG rather than an emoji (🗑 renders inconsistently across
+  // platforms and can't be recoloured) or an asset file (this app vendors
+  // everything and has no icon pipeline). Inherits currentColor.
+  function trashIcon() {
+    return (
+      `<svg class="icon-trash" viewBox="0 0 24 24" aria-hidden="true" focusable="false" ` +
+      `fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">` +
+      `<path d="M3 6h18"/><path d="M8 6V4h8v2"/>` +
+      `<path d="M6 6l1 14a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-14"/>` +
+      `<path d="M10 11v6"/><path d="M14 11v6"/>` +
+      `</svg>`
+    );
+  }
+
   function escapeHtml(s) {
     const d = document.createElement("div");
     d.textContent = s;
@@ -287,26 +301,109 @@ App.ui = (function () {
           ? `<span class="rung-badge gap-badge">${escapeHtml(t("catalogueGapBadge"))}</span>`
           : "";
         const isSel = selected.has(e.id);
-        // Select mode swaps the per-row delete for a checkbox: one-tap
-        // delete stays available without entering select mode, but can't be
-        // hit while you're busy ticking rows.
+        // In select mode the row shows a checkbox; otherwise nothing
+        // trailing — deleting one record is deliberately NOT a permanent
+        // tap target on the row. It lives behind a left-swipe (see
+        // .log-row-del below) and on the detail view.
         const trailing = selectMode
           ? `<span class="log-check${isSel ? " checked" : ""}" aria-hidden="true"></span>`
-          : `<button type="button" class="log-del" data-del="${e.id}" aria-label="${escapeHtml(t("btnLogDeleteOne"))}">×</button>`;
-        return `<div class="log-entry${selectMode ? " selectable" : ""}${isSel ? " selected" : ""}" data-id="${e.id}">
-          ${thumb}
-          <div class="body">
-            <div class="title">${escapeHtml(title)}</div>
-            <div class="meta">
-              <span class="rung-badge rung-${e.resolution_rung}">${escapeHtml(rungLabel(e.resolution_rung))}</span>
-              ${gapBadge}
-              ${escapeHtml(ctx)} · ${escapeHtml(App.util.fmtDate(e.timestamp))}
+          : "";
+        // The delete action sits behind the opaque row content and is only
+        // reachable once the row has been swiped aside.
+        return `<div class="log-row" data-id="${e.id}">
+          <button type="button" class="log-row-del" data-del="${e.id}" tabindex="-1"
+                  aria-label="${escapeHtml(t("btnLogDeleteOne"))}">${trashIcon()}</button>
+          <div class="log-entry${selectMode ? " selectable" : ""}${isSel ? " selected" : ""}">
+            ${thumb}
+            <div class="body">
+              <div class="title">${escapeHtml(title)}</div>
+              <div class="meta">
+                <span class="rung-badge rung-${e.resolution_rung}">${escapeHtml(rungLabel(e.resolution_rung))}</span>
+                ${gapBadge}
+                ${escapeHtml(ctx)} · ${escapeHtml(App.util.fmtDate(e.timestamp))}
+              </div>
             </div>
+            ${trailing}
           </div>
-          ${trailing}
         </div>`;
       })
       .join("");
+  }
+
+  // --- Encounter detail view ---
+  //
+  // The whole stored record for one encounter. Deliberately built from the
+  // same helpers renderResult uses (fieldRow / formatPublished / formatIsbn
+  // / rungLabel), so a book reads identically here and on the result card —
+  // this shows the extra things a saved encounter has that an in-flight
+  // draft doesn't: context, notes, coordinates and when it was logged.
+  function renderEncounterDetail(e) {
+    const card = document.getElementById("detail-card");
+    if (!card) return;
+    releaseObjectUrls();
+    let html = "";
+
+    if (e.photo_blob) html += `<img class="result-photo" src="${blobUrl(e.photo_blob)}">`;
+    if (e.id_photo_blob) {
+      html +=
+        `<div class="result-id-photo">` +
+        `<img src="${blobUrl(e.id_photo_blob)}">` +
+        `<span class="cap">${escapeHtml(t("resultIdPhotoCaption"))}</span>` +
+        `</div>`;
+    }
+
+    html += `<div style="margin-bottom:0.5rem">`;
+    html += `<span class="rung-badge rung-${e.resolution_rung}">${escapeHtml(rungLabel(e.resolution_rung))}</span>`;
+    if (isCatalogueGap(e)) {
+      html += ` <span class="rung-badge gap-badge">${escapeHtml(t("catalogueGapBadge"))}</span>`;
+    }
+    html += `</div>`;
+
+    const ed = e.edition;
+    if (ed) {
+      const titleValue = (ed.title || t("untitled")) + (ed.edition ? " " + ed.edition : "");
+      html += fieldRow(t("fieldTitle"), titleValue);
+      html += fieldRow(t("fieldAuthor"), ed.authors);
+      html += fieldRow(t("fieldPublished"), formatPublished(ed));
+      html += fieldRow(t("fieldPages"), ed.pages);
+      html += fieldRow(t("fieldIsbn"), formatIsbn(ed));
+      html += fieldRow(t("fieldDepositoLegal"), ed.deposito_legal);
+    } else {
+      html += `<p class="source-note">${escapeHtml(t("unidentifiedEncounter"))}</p>`;
+    }
+
+    // Identifiers that were read off the book but matched nothing are worth
+    // showing even when an edition exists — they're what a catalogue-gap
+    // case is evidence of.
+    if (!ed || isCatalogueGap(e)) {
+      html += fieldRow(t("fieldDetectedIsbn"), e.detected_isbn);
+      html += fieldRow(t("fieldDetectedDl"), e.detected_dl);
+    }
+
+    // Not fieldLocationNote/fieldNote: those carry "(optional)" because they
+    // label form inputs, which is meaningless on a read-only record.
+    html += fieldRow(t("fieldContext"), e.context ? contextLabel(e.context) : "");
+    html += fieldRow(t("detailLocationNote"), e.location_note);
+    html += fieldRow(t("detailNote"), e.note);
+
+    if (typeof e.lat_rounded === "number" && typeof e.lon_rounded === "number") {
+      const src = e.location_source
+        ? t(e.location_source === "gps" ? "locationSourceGps" : "locationSourceManual")
+        : "";
+      const coords = e.lat_rounded.toFixed(1) + ", " + e.lon_rounded.toFixed(1) + (src ? " · " + src : "");
+      html += fieldRow(t("fieldLocation"), coords);
+    }
+    html += fieldRow(t("fieldLoggedAt"), App.util.fmtDate(e.timestamp));
+
+    if (ed && ed.source) {
+      html += `<div class="source-note">${escapeHtml(t("sourceNote", { source: ed.source }))}</div>`;
+    }
+
+    html += `<div class="action-row">
+      <button class="btn danger" id="btn-detail-delete">${trashIcon()}<span>${escapeHtml(t("btnDeleteEncounter"))}</span></button>
+    </div>`;
+
+    card.innerHTML = html;
   }
 
   // --- Stats view ---
@@ -546,7 +643,7 @@ App.ui = (function () {
 
   return {
     showView, renderResult, fillManualForm, setManualPhoto, selectedContext,
-    renderLog, filterEncounters, renderStats, renderDexCompletion, renderDiscoveryGrid, renderLocationBanner, renderLocationResults,
+    renderLog, filterEncounters, renderEncounterDetail, renderStats, renderDexCompletion, renderDiscoveryGrid, renderLocationBanner, renderLocationResults,
     blobUrl, releaseObjectUrls,
   };
 })();

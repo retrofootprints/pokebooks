@@ -535,11 +535,88 @@
   }
 
   // --- Log / Stats views ---
-  let logFilter = "all";
+  const logState = { rung: "all", context: "all", query: "", selectMode: false, selectedIds: new Set() };
+  // The most recent delete, held only for the duration of the undo toast.
+  // Full records (photo blobs included) come straight off the list that was
+  // rendered, so undo restores the same rows with their original ids — no
+  // re-read needed, and nothing is written to disk in the meantime.
+  let undoBuffer = null;
+  let lastLoadedEncounters = [];
 
   async function refreshLog() {
-    const encounters = await App.idb.getAllEncounters();
-    App.ui.renderLog(encounters, logFilter);
+    lastLoadedEncounters = await App.idb.getAllEncounters();
+    // Drop selections whose rows no longer exist (deleted, or filtered
+    // away then deleted elsewhere) so a stale id can't ride along into a
+    // later bulk delete.
+    const live = new Set(lastLoadedEncounters.map((e) => e.id));
+    logState.selectedIds.forEach((id) => {
+      if (!live.has(id)) logState.selectedIds.delete(id);
+    });
+    App.ui.renderLog(lastLoadedEncounters, logState);
+    syncLogChrome();
+  }
+
+  // Keeps the select bar, its delete-count label and the Select toggle in
+  // step with logState. Called after every render and every selection change.
+  function syncLogChrome() {
+    const bar = document.getElementById("log-selectbar");
+    const delBtn = document.getElementById("btn-log-delete-selected");
+    const selectBtn = document.getElementById("btn-log-select");
+    bar.classList.toggle("hidden", !logState.selectMode);
+    selectBtn.textContent = App.i18n.t(logState.selectMode ? "btnLogSelectDone" : "btnLogSelect");
+    const n = logState.selectedIds.size;
+    delBtn.textContent = App.i18n.t("btnLogDeleteSelected", { n });
+    delBtn.disabled = n === 0;
+  }
+
+  function setLogSelectMode(on) {
+    logState.selectMode = on;
+    if (!on) logState.selectedIds.clear();
+    App.ui.renderLog(lastLoadedEncounters, logState);
+    syncLogChrome();
+  }
+
+  function toggleLogSelection(id) {
+    if (logState.selectedIds.has(id)) logState.selectedIds.delete(id);
+    else logState.selectedIds.add(id);
+    App.ui.renderLog(lastLoadedEncounters, logState);
+    syncLogChrome();
+  }
+
+  // Selects exactly what's on screen — the same filterEncounters predicate
+  // the list was rendered from, never the whole store. This is how "delete
+  // many by category" works: filter to it, then select all.
+  function selectAllFiltered() {
+    App.ui.filterEncounters(lastLoadedEncounters, logState).forEach((e) => logState.selectedIds.add(e.id));
+    App.ui.renderLog(lastLoadedEncounters, logState);
+    syncLogChrome();
+  }
+
+  // The single delete path for both one row and a bulk selection. Records
+  // are captured before the delete so undo can put them back verbatim.
+  async function deleteEncounterIds(ids) {
+    if (!ids.length) return;
+    const records = lastLoadedEncounters.filter((e) => ids.includes(e.id));
+    await App.idb.deleteEncounters(ids);
+    undoBuffer = records;
+    ids.forEach((id) => logState.selectedIds.delete(id));
+    await refreshLog();
+    App.util.toastAction(
+      App.i18n.tn("toastDeleted", records.length, { n: records.length }),
+      App.i18n.t("btnUndo"),
+      async () => {
+        const restoring = undoBuffer;
+        undoBuffer = null;
+        if (!restoring) return;
+        await App.idb.restoreEncounters(restoring);
+        await refreshLog();
+        App.util.toast(App.i18n.tn("toastRestored", restoring.length, { n: restoring.length }));
+      },
+      8000,
+      () => {
+        undoBuffer = null; // window closed unused — let the records go
+      }
+    );
   }
 
   async function refreshStats() {
@@ -659,8 +736,50 @@
       if (!chip) return;
       document.querySelectorAll("#log-filters .chip").forEach((c) => c.classList.remove("selected"));
       chip.classList.add("selected");
-      logFilter = chip.dataset.rung;
+      logState.rung = chip.dataset.rung;
       refreshLog();
+    });
+
+    document.getElementById("log-context-filters").addEventListener("click", (e) => {
+      const chip = e.target.closest(".chip");
+      if (!chip) return;
+      document.querySelectorAll("#log-context-filters .chip").forEach((c) => c.classList.remove("selected"));
+      chip.classList.add("selected");
+      logState.context = chip.dataset.context;
+      refreshLog();
+    });
+
+    // Debounced like the location search — re-rendering the whole list on
+    // every keystroke is wasteful and the input is re-rendered around, so
+    // it must not lose focus.
+    let logSearchTimer = null;
+    document.getElementById("log-search").addEventListener("input", (e) => {
+      const value = e.target.value;
+      clearTimeout(logSearchTimer);
+      logSearchTimer = setTimeout(() => {
+        logState.query = value;
+        refreshLog();
+      }, 120);
+    });
+
+    document.getElementById("btn-log-select").addEventListener("click", () => {
+      setLogSelectMode(!logState.selectMode);
+    });
+    document.getElementById("btn-log-select-cancel").addEventListener("click", () => setLogSelectMode(false));
+    document.getElementById("btn-log-select-all").addEventListener("click", selectAllFiltered);
+    document.getElementById("btn-log-delete-selected").addEventListener("click", () => {
+      deleteEncounterIds(Array.from(logState.selectedIds));
+    });
+
+    document.getElementById("log-list").addEventListener("click", (e) => {
+      const del = e.target.closest("[data-del]");
+      if (del) {
+        deleteEncounterIds([Number(del.dataset.del)]);
+        return;
+      }
+      if (!logState.selectMode) return; // rows are inert outside select mode
+      const row = e.target.closest(".log-entry");
+      if (row) toggleLogSelection(Number(row.dataset.id));
     });
 
     document.getElementById("btn-seed-random").addEventListener("click", seedRandomLocationsClicked);

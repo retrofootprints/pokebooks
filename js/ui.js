@@ -5,6 +5,7 @@ window.App = window.App || {};
 
 App.ui = (function () {
   const t = App.i18n.t;
+  const tn = App.i18n.tn;
 
   const CONTEXT_KEYS = {
     shop: "ctxShop", library: "ctxLibrary", friend: "ctxFriend", fair: "ctxFair",
@@ -217,13 +218,62 @@ App.ui = (function () {
   }
 
   // --- Log view ---
-  function renderLog(encounters, filterRung) {
+
+  // The ONE predicate deciding what's in the log right now. Both the list
+  // render and "Select all" run through it, so a bulk delete can never act
+  // on a different set than the one on screen — the single most dangerous
+  // way this feature could go wrong.
+  //
+  // Text matching folds diacritics via App.util.normText, the same
+  // normalisation the BNP title search and the location picker use, so
+  // "sao"/"São" match each other in both directions. Identifiers are
+  // searched too: a user who remembers an ISBN but not a title should find
+  // the row.
+  function filterEncounters(encounters, state) {
+    const rung = (state && state.rung) || "all";
+    const context = (state && state.context) || "all";
+    const q = App.util.normText((state && state.query) || "");
+
+    return encounters.filter((e) => {
+      if (rung !== "all" && String(e.resolution_rung) !== rung) return false;
+      if (context !== "all") {
+        // "none" is its own bucket — encounters saved without a context
+        // are otherwise unreachable by filter.
+        if (context === "none" ? !!e.context : e.context !== context) return false;
+      }
+      if (!q) return true;
+      const ed = e.edition || {};
+      const haystack = [
+        ed.title, ed.subtitle, ed.authors, ed.publisher,
+        e.note, e.location_note,
+        e.detected_isbn, e.detected_dl,
+        ed.isbn13, ed.isbn10, ed.deposito_legal,
+      ]
+        .filter(Boolean)
+        .join(" ");
+      return App.util.normText(haystack).indexOf(q) !== -1;
+    });
+  }
+
+  // state: { rung, context, query, selectMode, selectedIds:Set }
+  function renderLog(encounters, state) {
     const list = document.getElementById("log-list");
-    const filtered =
-      filterRung === "all" ? encounters : encounters.filter((e) => String(e.resolution_rung) === filterRung);
+    const countEl = document.getElementById("log-count");
+    const filtered = filterEncounters(encounters, state);
+    const selectMode = !!(state && state.selectMode);
+    const selected = (state && state.selectedIds) || new Set();
+
+    countEl.textContent = encounters.length
+      ? filtered.length === encounters.length
+        ? tn("logCountAll", encounters.length, { n: encounters.length })
+        : t("logCountFiltered", { n: filtered.length, total: encounters.length })
+      : "";
 
     if (!filtered.length) {
-      list.innerHTML = `<div class="empty-state">${escapeHtml(t("noEncountersYet"))}</div>`;
+      // "Nothing logged yet" and "nothing matches this filter" are
+      // different situations and only the first used to have copy.
+      const msg = encounters.length ? t("logNoMatches") : t("noEncountersYet");
+      list.innerHTML = `<div class="empty-state">${escapeHtml(msg)}</div>`;
       return;
     }
 
@@ -236,7 +286,14 @@ App.ui = (function () {
         const gapBadge = isCatalogueGap(e)
           ? `<span class="rung-badge gap-badge">${escapeHtml(t("catalogueGapBadge"))}</span>`
           : "";
-        return `<div class="log-entry">
+        const isSel = selected.has(e.id);
+        // Select mode swaps the per-row delete for a checkbox: one-tap
+        // delete stays available without entering select mode, but can't be
+        // hit while you're busy ticking rows.
+        const trailing = selectMode
+          ? `<span class="log-check${isSel ? " checked" : ""}" aria-hidden="true"></span>`
+          : `<button type="button" class="log-del" data-del="${e.id}" aria-label="${escapeHtml(t("btnLogDeleteOne"))}">×</button>`;
+        return `<div class="log-entry${selectMode ? " selectable" : ""}${isSel ? " selected" : ""}" data-id="${e.id}">
           ${thumb}
           <div class="body">
             <div class="title">${escapeHtml(title)}</div>
@@ -246,6 +303,7 @@ App.ui = (function () {
               ${escapeHtml(ctx)} · ${escapeHtml(App.util.fmtDate(e.timestamp))}
             </div>
           </div>
+          ${trailing}
         </div>`;
       })
       .join("");
@@ -488,7 +546,7 @@ App.ui = (function () {
 
   return {
     showView, renderResult, fillManualForm, setManualPhoto, selectedContext,
-    renderLog, renderStats, renderDexCompletion, renderDiscoveryGrid, renderLocationBanner, renderLocationResults,
+    renderLog, filterEncounters, renderStats, renderDexCompletion, renderDiscoveryGrid, renderLocationBanner, renderLocationResults,
     blobUrl, releaseObjectUrls,
   };
 })();

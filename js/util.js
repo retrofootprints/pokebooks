@@ -271,10 +271,51 @@ App.util = (function () {
   function toast(msg, ms) {
     const el = document.getElementById("toast");
     if (!el) return;
+    el.classList.remove("has-action");
     el.textContent = msg;
     el.classList.add("show");
     clearTimeout(toast._t);
     toast._t = setTimeout(() => el.classList.remove("show"), ms || 2500);
+  }
+
+  // A toast that carries one action button — used for undoing a delete.
+  // Built from DOM nodes rather than innerHTML because the message embeds
+  // user text (book titles, notes). The .has-action class re-enables
+  // pointer events, which the plain toast deliberately leaves off so it
+  // never intercepts taps.
+  //
+  // onExpire fires when the window closes WITHOUT the action being taken,
+  // so the caller can drop whatever it was holding for the undo.
+  function toastAction(msg, actionLabel, onAction, ms, onExpire) {
+    const el = document.getElementById("toast");
+    if (!el) return;
+    clearTimeout(toast._t);
+    el.textContent = "";
+    el.classList.add("has-action", "show");
+
+    const label = document.createElement("span");
+    label.className = "toast-msg";
+    label.textContent = msg;
+
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "toast-action";
+    btn.textContent = actionLabel;
+
+    let settled = false;
+    function close(taken) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(toast._t);
+      el.classList.remove("show", "has-action");
+      if (taken) onAction();
+      else if (onExpire) onExpire();
+    }
+
+    btn.addEventListener("click", () => close(true));
+    el.appendChild(label);
+    el.appendChild(btn);
+    toast._t = setTimeout(() => close(false), ms || 8000);
   }
 
   function fmtDate(ts) {
@@ -300,6 +341,6 @@ App.util = (function () {
     stripDiacritics, normText, onlyDigitsX,
     validIsbn13, validIsbn10, isbn10ToIsbn13, isbn13ToIsbn10,
     extractIsbnFromText, extractDLFromText, extractFichaTecnicaFields, validEan13,
-    roundCoord, toast, fmtDate, blobToBase64, base64ToBlob, dlNumber,
+    roundCoord, toast, toastAction, fmtDate, blobToBase64, base64ToBlob, dlNumber,
   };
 })();

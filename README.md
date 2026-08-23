@@ -283,6 +283,28 @@ correctly re-labels every existing encounter, not just new ones.
   (`#cam-scan-status`). `body.camera-active` also hides the location banner,
   which previously stayed on screen as a bright white card under the black
   control bar for the whole session, with toasts landing on top of it.
+- **Deleting encounters is undoable only inside the toast window — Export
+  is still the real backup.** The Log view supports search, rung/context
+  filtering, per-row delete and bulk delete (select mode → Select all →
+  Delete). Deletes apply immediately and offer Undo for 8 seconds; the
+  deleted records are held **in memory only** for that window
+  (`undoBuffer` in `js/main.js`) and restored via
+  `App.idb.restoreEncounters`, which uses `put` so a restored row keeps its
+  original id and both photo blobs. Once the window closes, or the page is
+  reloaded, they are gone — there is no server copy and no trash. This was
+  chosen over a confirm dialog deliberately: a confirm gets clicked through
+  reflexively, an undo window actually recovers mistakes. There is also
+  **no "delete everything" button** on purpose — clearing the log is
+  select-all inside select mode, so nothing destructive is reachable from a
+  resting screen.
+  **"Select all" selects exactly the filtered set**, never the whole store:
+  both it and the list render go through the same
+  `App.ui.filterEncounters` predicate, so a bulk delete can't act on rows
+  you can't see. That shared predicate is the safety property — keep it
+  that way if either is edited.
+  Editing saved encounters is **not** implemented yet;
+  `App.idb.updateEncounter` and `getEncounter` exist and are currently used
+  only by tests, ready for that pass.
 - **Identification awaits are guarded by a session token.** OCR takes
   seconds and a lookup can too, while the session can be torn down
   mid-flight (cancel, or navigating away). `sessionId` in `js/main.js` is

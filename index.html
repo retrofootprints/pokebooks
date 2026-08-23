@@ -126,7 +126,16 @@
 
   <!-- ===================== LOG VIEW ===================== -->
   <section id="view-log" class="view">
-    <h2 data-i18n="logHeading">Log</h2>
+    <div class="log-head">
+      <h2 data-i18n="logHeading">Log</h2>
+      <button type="button" class="btn small" id="btn-log-select" data-i18n="btnLogSelect">Select</button>
+    </div>
+
+    <input type="search" id="log-search" class="log-search"
+           data-i18n-placeholder="logSearchPlaceholder"
+           placeholder="Search title, author, note…" autocomplete="off">
+
+    <!-- Rung filter (how it was identified). -->
     <div class="log-filters" id="log-filters">
       <span class="chip selected" data-rung="all" data-i18n="filterAll">all</span>
       <span class="chip" data-rung="1" data-i18n="rungBarcode">Barcode</span>
@@ -135,6 +144,29 @@
       <span class="chip" data-rung="4" data-i18n="rungTitleMatch">Title match</span>
       <span class="chip" data-rung="5" data-i18n="rungManual">Logged by hand</span>
     </div>
+
+    <!-- Context filter — the "category" axis for bulk selection: filter to
+         one, then Select all. -->
+    <div class="log-filters" id="log-context-filters">
+      <span class="chip selected" data-context="all" data-i18n="filterAll">all</span>
+      <span class="chip" data-context="shop" data-i18n="ctxShop">shop</span>
+      <span class="chip" data-context="library" data-i18n="ctxLibrary">library</span>
+      <span class="chip" data-context="friend" data-i18n="ctxFriend">friend</span>
+      <span class="chip" data-context="fair" data-i18n="ctxFair">fair</span>
+      <span class="chip" data-context="secondhand" data-i18n="ctxSecondhand">secondhand</span>
+      <span class="chip" data-context="owned" data-i18n="ctxOwned">owned</span>
+      <span class="chip" data-context="other" data-i18n="ctxOther">other</span>
+      <span class="chip" data-context="none" data-i18n="ctxNone">no context</span>
+    </div>
+
+    <!-- Selection action bar; only shown in select mode. -->
+    <div class="log-selectbar hidden" id="log-selectbar">
+      <button type="button" class="btn small" id="btn-log-select-all" data-i18n="btnLogSelectAll">Select all</button>
+      <button type="button" class="btn small" id="btn-log-select-cancel" data-i18n="btnCancel">Cancel</button>
+      <button type="button" class="btn small danger" id="btn-log-delete-selected"></button>
+    </div>
+
+    <div id="log-count" class="log-count"></div>
     <div id="log-list"></div>
     <div class="action-row">
       <button class="btn" id="btn-seed-random" data-i18n="btnSeedRandom">Add 50 random test locations</button>

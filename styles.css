@@ -480,8 +480,69 @@ form.manual-form textarea { min-height: 4rem; resize: vertical; }
 .action-row button { flex: 1; }
 
 /* --- Log view --- */
-.log-filters { display: flex; gap: 0.5rem; margin-bottom: 0.75rem; overflow-x: auto; padding-bottom: 0.2rem; }
-.log-entry { display: flex; gap: 0.75rem; padding: 0.75rem; border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 0.5rem; }
+/* The row scrolls sideways, so chips must not wrap — a wrapped two-word
+   label ("Printed ISBN") turns a pill into a tall oval, which looks broken
+   once there are two filter rows stacked. */
+.log-filters { display: flex; gap: 0.5rem; margin-bottom: 0.5rem; overflow-x: auto; padding-bottom: 0.2rem; }
+.log-filters .chip { white-space: nowrap; flex-shrink: 0; }
+.log-head { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
+.log-head h2 { margin: 0; }
+.log-search {
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  margin: 0.6rem 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font: inherit;
+  background: var(--panel);
+  color: var(--ink);
+}
+.log-selectbar { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.6rem; }
+.log-selectbar .danger { margin-left: auto; }
+.log-count { color: var(--muted); font-size: 0.8rem; margin-bottom: 0.5rem; }
+.log-entry { display: flex; gap: 0.75rem; padding: 0.75rem; border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 0.5rem; align-items: center; }
+.log-entry.selectable { cursor: pointer; }
+.log-entry.selected { border-color: var(--accent); background: #f2f7f5; }
+/* Per-row delete: present but recessive, so it reads as available without
+   competing with the row content. */
+.log-del {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  font: inherit;
+  font-size: 1.4rem;
+  line-height: 1;
+  color: var(--muted);
+  padding: 0.35rem 0.5rem;
+  border-radius: 6px;
+}
+.log-del:active { background: var(--border); color: var(--danger); }
+.log-check {
+  flex-shrink: 0;
+  width: 1.35rem;
+  height: 1.35rem;
+  border: 2px solid var(--border);
+  border-radius: 50%;
+}
+.log-check.checked {
+  background: var(--accent);
+  border-color: var(--accent);
+  position: relative;
+}
+/* Tick drawn from two borders on a rotated box — deterministic, no font or
+   asset dependency. (A crossed-gradient version read as an "×", which means
+   delete, not selected.) */
+.log-check.checked::after {
+  content: "";
+  position: absolute;
+  left: 0.38rem;
+  top: 0.14rem;
+  width: 0.25rem;
+  height: 0.5rem;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
 .log-entry img.thumb { width: 3.5rem; height: 3.5rem; object-fit: cover; border-radius: 6px; flex-shrink: 0; background: #eee; }
 .log-entry .body { flex: 1; min-width: 0; }
 .log-entry .title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -652,5 +713,25 @@ nav.bottom-nav button.active { color: var(--accent); font-weight: 700; }
   transition: opacity 0.2s;
 }
 .toast.show { opacity: 1; }
+/* A toast carrying an action has to be tappable; the plain toast stays
+   pointer-events:none so it never intercepts taps on the view beneath. */
+.toast.has-action {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  text-align: left;
+}
+.toast .toast-msg { flex: 1; min-width: 0; }
+.toast .toast-action {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  font: inherit;
+  font-weight: 700;
+  color: #fff;
+  text-decoration: underline;
+  padding: 0.25rem 0.25rem;
+}
 
 .hidden { display: none !important; }

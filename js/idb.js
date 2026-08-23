@@ -68,6 +68,36 @@ App.idb = (function () {
     });
   }
 
+  // Deletes are irreversible beyond the caller's in-memory undo buffer (see
+  // js/main.js) — there is no server copy. Export stays the real backup.
+  // One transaction for the whole batch, so a bulk delete is atomic: either
+  // every id goes or none does.
+  async function deleteEncounters(ids) {
+    if (!ids || !ids.length) return 0;
+    const store = await tx("encounters", "readwrite");
+    return new Promise((resolve, reject) => {
+      ids.forEach((id) => store.delete(id));
+      store.transaction.oncomplete = () => resolve(ids.length);
+      store.transaction.onerror = () => reject(store.transaction.error);
+      store.transaction.onabort = () => reject(store.transaction.error);
+    });
+  }
+
+  // Undo support: re-inserts whole records, preserving their original ids so
+  // a restored encounter is the same row it was, not a copy. Uses put(), not
+  // add(): the records carry an in-line key, and put upserts rather than
+  // throwing ConstraintError if that id somehow exists again.
+  async function restoreEncounters(records) {
+    if (!records || !records.length) return 0;
+    const store = await tx("encounters", "readwrite");
+    return new Promise((resolve, reject) => {
+      records.forEach((r) => store.put(r));
+      store.transaction.oncomplete = () => resolve(records.length);
+      store.transaction.onerror = () => reject(store.transaction.error);
+      store.transaction.onabort = () => reject(store.transaction.error);
+    });
+  }
+
   async function getEncounter(id) {
     const store = await tx("encounters", "readonly");
     return new Promise((resolve, reject) => {
@@ -146,6 +176,7 @@ App.idb = (function () {
 
   return {
     open, addEncounter, updateEncounter, getAllEncounters, getEncounter,
+    deleteEncounters, restoreEncounters,
     cacheGet, cachePut, exportAll, importAll,
   };
 })();

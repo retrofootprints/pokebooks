@@ -25,14 +25,34 @@
   <!-- ===================== CAPTURE VIEW ===================== -->
   <section id="view-capture" class="view active">
 
+    <!-- Camera. The overlay children only render meaningfully while
+         body.camera-active is on (see styles.css); they sit ON the video
+         rather than in a band below it, so the prompt is where the user is
+         already looking. -->
     <div class="camera-wrap hidden" id="camera-wrap">
       <video id="camera-video" autoplay playsinline muted></video>
       <canvas id="camera-canvas" class="hidden"></canvas>
+      <div class="cam-overlay" id="cam-overlay">
+        <div class="cam-instruction" id="cam-instruction"></div>
+        <div class="cam-reticle hidden" id="cam-reticle"></div>
+        <div class="cam-scan-status" id="cam-scan-status"></div>
+      </div>
     </div>
     <div class="status-line" id="capture-status"></div>
+    <!-- Controls are right-skewed on purpose: for a right-handed one-handed
+         grip the thumb arcs from the bottom-right, so the shutter sits in
+         that corner and Cancel is pushed to the far left, deliberately the
+         most expensive target since it discards the in-progress encounter. -->
     <div class="camera-controls hidden" id="camera-controls">
-      <button class="btn primary" id="btn-shutter" data-i18n="btnCapturePhoto">Capture photo</button>
-      <button class="btn" id="btn-cancel-camera" data-i18n="btnCancel">Cancel</button>
+      <div class="cam-modes" id="cam-modes">
+        <button type="button" class="cam-mode" data-mode="identify" data-i18n="camModeIdentify">Identify</button>
+        <button type="button" class="cam-mode" data-mode="photo" data-i18n="camModePhoto">Photo</button>
+      </div>
+      <div class="cam-actions">
+        <button type="button" class="cam-text-btn" id="btn-cancel-camera" data-i18n="btnCancel">Cancel</button>
+        <button type="button" class="cam-text-btn" id="btn-cam-skip"></button>
+        <button type="button" class="cam-shutter" id="btn-shutter"></button>
+      </div>
     </div>
 
     <!-- Location opt-in. Rendered by App.ui.renderLocationBanner(); starts

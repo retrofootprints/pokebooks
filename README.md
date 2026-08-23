@@ -234,33 +234,61 @@ correctly re-labels every existing encounter, not just new ones.
   script corrects for it. If BNP ever fixes the header upstream,
   `BNP_HEADER` in `scripts/build_index.py` will need updating to match —
   check a few rows by hand before assuming the old shift still applies.
-- **One "Scan" button, not the spec's separate "Scan barcode" /
-  "Photograph page" pair.** Deliberate deviation, made after real hands-on
-  use: barcode detection is cheap enough to run continuously in the
-  background for the whole camera session regardless of intent, and the
-  shutter (for the OCR path — rungs 2-4) is available the entire time too,
-  rather than gated behind picking a mode up front. Whichever resolves
-  first wins. This removes a decision the user usually can't make in
-  advance anyway (you don't know if a given book has a barcode until you
-  look). See `startScanFlow` in `js/main.js`.
-- **Capture is two stages, one continuous camera session: the keepsake
-  photo, then identification.** Tapping "Log a book" opens the camera and
-  asks for a single photo of the book as found — that's the encounter's
-  `photo_blob`, always kept, regardless of how (or whether) identification
-  succeeds afterward. Only once that's taken does the barcode loop start
-  and the shutter switch to the identification capture (barcode/copyright
-  page), exactly as the single-flow behavior above — the camera stream
-  itself never closes and reopens between the two stages, just the status
-  line and shutter behavior change. This closed two real gaps: previously
-  a barcode-only resolution (rung 1) kept no photo at all (barcode
-  detection reads the live stream, not a captured frame), and there was no
-  way to attach a photo to a "log it anyway" (rung 5) encounter at all.
+- **Barcode and page-OCR are one "Identify" mode, not the spec's separate
+  "Scan barcode" / "Photograph page" pair.** Deliberate deviation, made
+  after real hands-on use: barcode detection is cheap enough to run
+  continuously in the background regardless of intent, and the shutter (for
+  the OCR path — rungs 2-4) is available the entire time too, rather than
+  gated behind picking barcode-vs-page up front. Whichever resolves first
+  wins. This removes a decision the user usually can't make in advance
+  anyway (you don't know if a given book has a barcode until you look).
+  **Preserved deliberately when the camera gained a mode strip** — see the
+  next bullet; the strip separates identify-vs-photo, never
+  barcode-vs-page.
+- **The camera is a two-mode viewfinder — Identify, then Photo — not a
+  wizard.** It opens in **Identify** (barcode auto-detects continuously
+  while the shutter photographs the copyright page for OCR) and
+  auto-advances to **Photo** (the keepsake shot of the book as found) once
+  something resolves, so the default path is identify → photo. But the mode
+  strip is live throughout, so either mode can be entered directly at any
+  point. One camera stream throughout: switching modes never re-inits it.
+  Rationale for the split — the two acts genuinely differ in *who decides
+  when they end*: identify ends when the **app** recognises something,
+  photo ends when the **user** presses the shutter. They therefore get
+  different chrome (Identify shows a framing reticle and live scan status;
+  Photo is a clean viewfinder).
   **Both photos are kept**, as two separate fields — `photo_blob` (the
   keepsake, shown large everywhere) and `id_photo_blob` (the barcode/
   copyright-page shot, shown small on the result view captioned "Used for
   identification") — per the spec's "keep every photo, including from
-  failed resolutions." See `startScanFlow`/`encounterPhotoCaptured`/
-  `beginIdentifyStage`/`identificationPhotoCaptured` in `js/main.js`.
+  failed resolutions." A barcode-only resolution still keeps an id photo
+  (a still is grabbed at detection time, since barcode detection reads the
+  live stream rather than a captured frame). **Skip** never loses the
+  encounter: skipping Identify ends as rung 5, skipping Photo saves the
+  identified edition with `photo_blob: null`.
+  See `startScanFlow` / `enterIdentifyMode` / `enterPhotoMode` /
+  `finishCapture` in `js/main.js`.
+- **Camera controls are right-skewed for one-handed use.** For a
+  right-handed one-handed grip the thumb arcs from the bottom-right, so the
+  shutter sits in that corner and the mode strip is right-aligned just above
+  it. **Cancel is pushed to the far left on purpose** — deliberately the
+  most expensive target on screen, since it discards the in-progress
+  encounter. Nothing interactive sits in the top half; the instruction scrim
+  and scan status are read-only.
+- **The capture prompt is drawn on the viewfinder, not in a band below
+  it.** It used to be `.status-line`, 0.9rem grey text wedged between the
+  video and the button row — structurally the one place nobody looks, and
+  reported as such. It's now a high-contrast scrim across the top of the
+  live image (`#cam-instruction`), with scan feedback under the reticle
+  (`#cam-scan-status`). `body.camera-active` also hides the location banner,
+  which previously stayed on screen as a bright white card under the black
+  control bar for the whole session, with toasts landing on top of it.
+- **Identification awaits are guarded by a session token.** OCR takes
+  seconds and a lookup can too, while the session can be torn down
+  mid-flight (cancel, or navigating away). `sessionId` in `js/main.js` is
+  bumped on every start/stop, and anything resuming after an `await` checks
+  its token still matches — otherwise a late-resolving OCR would resurrect a
+  half-open camera on top of whatever view the user had moved to.
 
 ## Repo layout
 

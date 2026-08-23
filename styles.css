@@ -263,25 +263,114 @@ body.camera-active .camera-wrap {
   border-radius: 0;
   margin-bottom: 0;
 }
+/* Everything that isn't the camera gets out of the way. The location
+   banner belongs here too — it used to stay visible as a bright white card
+   under the black control bar for the whole session, with toasts landing on
+   top of it, which was most of the visual clutter. */
 body.camera-active .search-row,
 body.camera-active .log-anyway,
-body.camera-active #search-results {
-  display: none;
-}
+body.camera-active #search-results,
+body.camera-active .location-banner,
 body.camera-active .status-line {
-  flex: 0 0 auto;
-  margin: 0;
-  padding: 0.6rem 1rem;
-  min-height: 1.2em;
-  color: #fff;
-  background: rgba(0, 0, 0, 0.6);
-  text-align: center;
+  display: none;
 }
 body.camera-active .camera-controls {
   flex: 0 0 auto;
   margin: 0;
   padding: 0.75rem 1rem calc(0.75rem + env(safe-area-inset-bottom));
   background: #000;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.6rem;
+}
+
+/* --- Camera overlay: prompt and scan feedback drawn ON the viewfinder --- */
+.cam-overlay {
+  position: absolute;
+  inset: 0;
+  /* Read-only layer — taps must reach the video//controls beneath. */
+  pointer-events: none;
+}
+.cam-instruction {
+  padding: calc(0.7rem + env(safe-area-inset-top)) 1rem 0.7rem;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 1.05rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+/* Bright cut-out framing guide: the huge spread shadow dims everything
+   outside the box, so the box reads as a window without needing an SVG
+   mask. Identify mode only — a keepsake photo is freely composed. */
+.cam-reticle {
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  top: 34%;
+  height: 24%;
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  border-radius: 8px;
+  box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.45);
+}
+.cam-scan-status {
+  position: absolute;
+  left: 1rem;
+  right: 1rem;
+  top: 61%;
+  text-align: center;
+  color: #fff;
+  font-size: 0.9rem;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+}
+
+/* --- Camera controls (right-skewed, see index.html comment) --- */
+.cam-modes { display: flex; justify-content: flex-end; gap: 0.25rem; }
+.cam-mode {
+  background: none;
+  border: none;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.55);
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+}
+.cam-mode.active { color: #fff; background: rgba(255, 255, 255, 0.16); }
+.cam-actions { display: flex; align-items: center; gap: 1rem; }
+.cam-text-btn {
+  background: none;
+  border: none;
+  font: inherit;
+  font-size: 0.95rem;
+  color: #fff;
+  padding: 0.5rem 0.25rem;
+}
+/* Pushed to the far left — hardest to reach by design. */
+#btn-cancel-camera { margin-right: auto; opacity: 0.75; }
+.cam-shutter {
+  width: 68px;
+  height: 68px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: #fff;
+  border: 4px solid rgba(255, 255, 255, 0.45);
+  background-clip: padding-box;
+}
+.cam-shutter:active { transform: scale(0.94); }
+/* While OCR runs, nothing is tappable — the frame is already captured, and
+   a mid-flight teardown would strand the awaiting identification (js/main.js
+   guards that with sessionId, but the control shouldn't invite it either).
+   #btn-cancel-camera is listed by id so its own id-specificity opacity above
+   doesn't win and leave Cancel looking active while it isn't. */
+.camera-controls.busy .cam-shutter,
+.camera-controls.busy .cam-mode,
+.camera-controls.busy .cam-text-btn,
+.camera-controls.busy #btn-cancel-camera {
+  opacity: 0.4;
+  pointer-events: none;
 }
 
 button.btn {

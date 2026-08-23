@@ -6,13 +6,21 @@
   let currentDraft = null;
   let activeScan = null; // { cancel() } from barcode.startScanLoop, while scanning
 
-  // Two-stage capture session state. "encounter" is the keepsake photo of
-  // the book as found (always taken first, always kept, regardless of how
-  // — or whether — identification succeeds); "identify" is the existing
-  // barcode/OCR flow, entered only after the keepsake shot. See
-  // startScanFlow/encounterPhotoCaptured/beginIdentifyStage below.
-  let captureStage = null; // "encounter" | "identify" | null
-  let pendingEncounterPhoto = null;
+  // Capture session state. The camera is a two-MODE viewfinder, not a
+  // wizard: "identify" (barcode auto-detect + shutter-to-OCR-the-page) and
+  // "photo" (the keepsake shot of the book as found). It opens in identify
+  // mode and auto-advances to photo once something resolves, so the default
+  // path is identify -> photo — but the mode strip is live the whole time,
+  // so either can be entered directly. One camera stream throughout;
+  // switching modes never re-inits it.
+  let captureMode = null; // "identify" | "photo" | null
+  let pendingDraft = null; // result of identification, awaiting its keepsake photo
+  // Bumped whenever a capture session starts or ends. Identification awaits
+  // (OCR takes seconds, a lookup can too), and the session can be torn down
+  // mid-flight — cancelling, or navigating away. Anything resuming after an
+  // await must check its token still matches, or it would resurrect a
+  // half-open camera on top of whatever view the user moved to.
+  let sessionId = 0;
 
   const videoEl = document.getElementById("camera-video");
   const canvasEl = document.getElementById("camera-canvas");
@@ -20,9 +28,30 @@
   const cameraControls = document.getElementById("camera-controls");
   const captureGrid = document.getElementById("capture-grid");
   const statusLine = document.getElementById("capture-status");
+  const camInstruction = document.getElementById("cam-instruction");
+  const camScanStatus = document.getElementById("cam-scan-status");
+  const camReticle = document.getElementById("cam-reticle");
+  const camModes = document.getElementById("cam-modes");
+  const btnCamSkip = document.getElementById("btn-cam-skip");
+  const btnShutter = document.getElementById("btn-shutter");
 
   function setStatus(msg) {
     statusLine.textContent = msg || "";
+  }
+
+  // The prompt lives on the viewfinder, not in a band below it — a 0.9rem
+  // grey strip between the video and the buttons is the one place nobody
+  // looks, which is why the old prompts went unread.
+  function setCamInstruction(msg) {
+    camInstruction.textContent = msg || "";
+  }
+
+  function setCamScanStatus(msg) {
+    camScanStatus.textContent = msg || "";
+  }
+
+  function setCamBusy(busy) {
+    cameraControls.classList.toggle("busy", !!busy);
   }
 
   // The "camera-active" body class drives a fullscreen layout in
@@ -60,87 +89,69 @@
     setStatus("");
   }
 
-  async function stopEverything() {
+  function stopScanLoop() {
     if (activeScan) {
       activeScan.cancel();
       activeScan = null;
     }
-    App.capture.stopCamera();
-    hideCameraUI();
-    captureStage = null;
-    pendingEncounterPhoto = null;
   }
 
-  // --- Scan: keepsake photo first, then identification (rungs 1-4) ---
+  async function stopEverything() {
+    sessionId++; // invalidates any identification still awaiting
+    stopScanLoop();
+    App.capture.stopCamera();
+    hideCameraUI();
+    setCamBusy(false);
+    captureMode = null;
+    pendingDraft = null;
+  }
+
+  // --- Capture: a two-mode viewfinder (identify, then photo) ---
   //
-  // Two stages in one continuous camera session — the stream only opens
-  // once; moving between stages is just a status-line/shutter-behaviour
-  // change, not a re-init. Stage 1 ("encounter") is a single deliberate
-  // shutter tap for the book as found — always kept as the encounter's
-  // photo_blob, regardless of what identification does next (previously,
-  // a barcode-only resolution kept no photo at all, since barcode
-  // detection reads the live stream rather than a captured frame — this
-  // fixes that too). Stage 2 ("identify") is the pre-existing flow:
-  // barcode detection runs continuously in the background (cheap — one
-  // detect() call per frame) while the shutter becomes available for an
-  // OCR capture; whichever resolves first wins. See shutterClicked,
-  // beginIdentifyStage.
+  // "Identify" deliberately keeps barcode and page-OCR merged into ONE
+  // mode rather than offering them as separate choices: that merge was made
+  // after real hands-on use (see the README's "One 'Scan' button" note),
+  // because you can't tell whether a book has a barcode until you're
+  // already looking at it. So barcode detection runs continuously in the
+  // background (cheap — one detect() call per frame) while the shutter
+  // stays available to photograph the copyright page; whichever resolves
+  // first wins. The mode strip separates the two acts that genuinely
+  // differ — identify ends when the APP recognises something, photo ends
+  // when the USER decides — without reintroducing that up-front decision.
   async function startScanFlow() {
     try {
       showCameraUI();
-      captureStage = "encounter";
-      pendingEncounterPhoto = null;
-      setStatus(App.i18n.t("statusEncounterPrompt"));
+      sessionId++;
+      pendingDraft = null;
+      enterIdentifyMode();
       await App.capture.startCamera(videoEl);
     } catch (err) {
       setStatus(App.i18n.t("statusCameraUnavailable", { msg: err.message }));
-      hideCameraUI();
-      captureStage = null;
-      return;
+      await stopEverything();
     }
-    // No barcode loop yet — starts once the keepsake photo is captured,
-    // see beginIdentifyStage.
   }
 
-  function shutterClicked() {
-    return captureStage === "encounter" ? encounterPhotoCaptured() : identificationPhotoCaptured();
+  function syncModeUI() {
+    camModes.querySelectorAll(".cam-mode").forEach((b) => {
+      b.classList.toggle("active", b.dataset.mode === captureMode);
+    });
+    const identifying = captureMode === "identify";
+    camReticle.classList.toggle("hidden", !identifying);
+    setCamInstruction(App.i18n.t(identifying ? "statusIdentifyPrompt" : "statusEncounterPrompt"));
+    setCamScanStatus(identifying ? App.i18n.t("camScanLooking") : "");
+    btnCamSkip.textContent = App.i18n.t(identifying ? "btnCamSkip" : "btnCamSkipPhoto");
+    btnShutter.setAttribute(
+      "aria-label",
+      App.i18n.t(identifying ? "btnShutterPage" : "btnShutterPhoto")
+    );
   }
 
-  async function encounterPhotoCaptured() {
-    let blob;
-    try {
-      blob = await App.capture.capturePhotoBlob(videoEl);
-    } catch (err) {
-      App.util.toast(App.i18n.t("toastCaptureFailed", { msg: err.message }));
-      return;
-    }
-    pendingEncounterPhoto = blob;
-    App.util.toast(App.i18n.t("toastEncounterCaptured"));
-    beginIdentifyStage();
-  }
-
-  function beginIdentifyStage() {
-    captureStage = "identify";
-    setStatus(App.i18n.t("statusIdentifyPrompt"));
+  function enterIdentifyMode() {
+    captureMode = "identify";
+    syncModeUI();
+    if (activeScan) return; // already scanning; don't stack loops
     activeScan = App.barcode.startScanLoop(videoEl, canvasEl, {
-      onBook: async (isbn13) => {
-        // Barcode resolution reads the live stream, not a captured frame —
-        // grab one still shot now (before the stream stops) purely so this
-        // rung also keeps an identification photo, same as the OCR rungs.
-        // Best-effort: a capture failure here shouldn't block resolving
-        // the book itself, so it's swallowed to null rather than surfaced.
-        const idPhoto = await App.capture.capturePhotoBlob(videoEl).catch(() => null);
-        const keepsake = pendingEncounterPhoto;
-        await stopEverything();
-        setStatus("");
-        App.util.toast(App.i18n.t("toastLookingUp", { isbn: isbn13 }));
-        const draft = await App.ladder.resolveFromBarcode(isbn13, idPhoto);
-        draft.photo_blob = keepsake;
-        currentDraft = draft;
-        App.ui.renderResult(draft);
-        wireResultButtons();
-        App.ui.showView("result");
-      },
+      onBook: onBarcodeFound,
       onReject: (raw) => {
         App.util.toast(App.i18n.t("toastNotBookBarcode", { raw }));
       },
@@ -148,12 +159,44 @@
     });
   }
 
-  async function identificationPhotoCaptured() {
-    // Two captures from the same frame: idPhotoBlob is what gets saved/
-    // shown as the identification photo (small, resized —
-    // capturePhotoBlob), ocrBlob is a full-resolution capture OCR actually
-    // reads (captureHighResBlob). Both are grabbed before stopEverything()
-    // stops the stream.
+  function enterPhotoMode() {
+    // Barcode detection is pointless (and wasteful) while composing the
+    // keepsake shot, and would hijack the flow if a spine barcode drifted
+    // into frame.
+    stopScanLoop();
+    captureMode = "photo";
+    syncModeUI();
+  }
+
+  async function onBarcodeFound(isbn13) {
+    if (captureMode !== "identify") return; // mode changed mid-detect
+    const mySession = sessionId;
+    // Barcode resolution reads the live stream, not a captured frame — grab
+    // one still now, purely so this rung also keeps an identification photo
+    // like the OCR rungs do. Best-effort: a capture failure here must not
+    // block resolving the book, so it's swallowed to null.
+    const idPhoto = await App.capture.capturePhotoBlob(videoEl).catch(() => null);
+    stopScanLoop(); // stop before awaiting, so it can't fire twice
+    setCamBusy(true);
+    setCamScanStatus(App.i18n.t("toastLookingUp", { isbn: isbn13 }));
+    const draft = await App.ladder.resolveFromBarcode(isbn13, idPhoto);
+    if (mySession !== sessionId) return; // session ended while looking up
+    pendingDraft = draft;
+    setCamBusy(false);
+    App.util.toast(App.i18n.t("toastIdentified"));
+    enterPhotoMode();
+  }
+
+  function shutterClicked() {
+    return captureMode === "identify" ? identifyShutter() : photoShutter();
+  }
+
+  async function identifyShutter() {
+    // Two captures from the same frame: idPhotoBlob is what gets saved and
+    // shown as the identification photo (small, resized), ocrBlob is a
+    // full-resolution capture OCR actually reads — the stored photo's
+    // size/quality target is tuned for browsing the log, too lossy for
+    // small printed text.
     let idPhotoBlob, ocrBlob;
     try {
       idPhotoBlob = await App.capture.capturePhotoBlob(videoEl);
@@ -162,31 +205,63 @@
       App.util.toast(App.i18n.t("toastCaptureFailed", { msg: err.message }));
       return;
     }
-    const keepsake = pendingEncounterPhoto;
-    await stopEverything();
-    setStatus(App.i18n.t("statusReadingText"));
-    App.ui.showView("capture"); // stay put but show progress via status line
+    const mySession = sessionId;
+    stopScanLoop();
+    setCamBusy(true);
+    setCamInstruction(App.i18n.t("statusReadingText"));
+    setCamScanStatus("");
+    let draft;
     try {
-      const draft = await App.ladder.resolveFromPhoto(idPhotoBlob, ocrBlob, (deg, i, total) => {
-        setStatus(
-          i === 0
-            ? App.i18n.t("statusReadingText")
-            : App.i18n.t("statusTryingRotation", { i: i + 1, total })
-        );
+      draft = await App.ladder.resolveFromPhoto(idPhotoBlob, ocrBlob, (deg, i, total) => {
+        setCamScanStatus(i === 0 ? "" : App.i18n.t("statusTryingRotation", { i: i + 1, total }));
       });
-      draft.photo_blob = keepsake;
-      currentDraft = draft;
-      setStatus("");
-      App.ui.renderResult(draft);
-      wireResultButtons();
-      wireCandidateClicks(draft);
-      App.ui.showView("result");
     } catch (err) {
-      setStatus("");
+      if (mySession !== sessionId) return;
       App.util.toast(App.i18n.t("toastOcrFailed", { msg: err.message }));
-      currentDraft = App.ladder.resolveManual(keepsake, idPhotoBlob);
-      openManualForm();
+      // Keep the identification photo even though reading it failed — the
+      // spec's "keep every photo, including from failed resolutions" rule.
+      draft = App.ladder.resolveManual(null, idPhotoBlob);
     }
+    if (mySession !== sessionId) return; // session ended while reading
+    pendingDraft = draft;
+    setCamBusy(false);
+    enterPhotoMode();
+  }
+
+  async function photoShutter() {
+    let blob;
+    try {
+      blob = await App.capture.capturePhotoBlob(videoEl);
+    } catch (err) {
+      App.util.toast(App.i18n.t("toastCaptureFailed", { msg: err.message }));
+      return;
+    }
+    await finishCapture(blob);
+  }
+
+  // Skip means different things per mode, but never loses the encounter:
+  // in identify it moves on without identifying (ends as rung 5), in photo
+  // it finishes with whatever was identified and no keepsake shot.
+  function camSkipClicked() {
+    if (captureMode === "identify") enterPhotoMode();
+    else finishCapture(null);
+  }
+
+  async function finishCapture(keepsakeBlob) {
+    const draft = pendingDraft || App.ladder.resolveManual(null, null);
+    await stopEverything(); // clears pendingDraft, so read it first
+    draft.photo_blob = keepsakeBlob || null;
+    currentDraft = draft;
+    // A rung-5 draft has nothing to confirm — send it straight to the form
+    // to be filled in by hand, same as the old OCR-failure path did.
+    if (draft.resolution_rung === 5) {
+      openManualForm();
+      return;
+    }
+    App.ui.renderResult(draft);
+    wireResultButtons();
+    wireCandidateClicks(draft);
+    App.ui.showView("result");
   }
 
   function wireCandidateClicks(draft) {
@@ -553,6 +628,13 @@
     document.getElementById("btn-scan").addEventListener("click", startScanFlow);
     document.getElementById("btn-shutter").addEventListener("click", shutterClicked);
     document.getElementById("btn-cancel-camera").addEventListener("click", stopEverything);
+    btnCamSkip.addEventListener("click", camSkipClicked);
+    camModes.addEventListener("click", (e) => {
+      const btn = e.target.closest(".cam-mode");
+      if (!btn || btn.dataset.mode === captureMode) return;
+      if (btn.dataset.mode === "identify") enterIdentifyMode();
+      else enterPhotoMode();
+    });
     document.getElementById("btn-log-anyway").addEventListener("click", logAnywayClicked);
     document.getElementById("btn-search").addEventListener("click", searchClicked);
     document.getElementById("search-input").addEventListener("keydown", (e) => {

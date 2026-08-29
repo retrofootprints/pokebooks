@@ -8,9 +8,14 @@
   --accent-ink: #ffffff;
   --danger: #a3382c;
   --warn: #8a6415;
-  --rung1: #1f5f4f;
-  --rung2: #2c6e8c;
-  --rung3: #6b4fa0;
+  /* Rung badge colours. The ramp encodes CONFIDENCE, darkest-most-trusted
+     first, not the rung number — rung 3 (Depósito Legal) now outranks
+     rung 1 (barcode) and rung 2 (printed ISBN), so 3 takes the strongest
+     colour. The numbers themselves are stable persisted IDs; see
+     js/ladder.js. Only the values moved here, not the class names. */
+  --rung3: #1f5f4f;
+  --rung1: #2c6e8c;
+  --rung2: #6b4fa0;
   --rung4: #8a6415;
   --rung5: #6b6a66;
 

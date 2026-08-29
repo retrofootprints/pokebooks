@@ -101,13 +101,42 @@ App.catalogue = (function () {
     );
   }
 
+  // Exact-match on an indexed column (idx_dl), tried against both spellings
+  // of the year. build_index.py's normalize_dl preserves the year's digit
+  // count as BNP wrote it, so the same registration appears as "378724/1979"
+  // on some rows and "378724/79" on others (docs/bnp-findings.md), while
+  // OCR emits whatever is printed on the page. A single `=` therefore misses
+  // roughly whenever the two disagree — tolerable when DL was the fallback
+  // path, not now that it's the primary one. Both probes hit the index, so
+  // the second is cheap.
   async function lookupByDL(dl) {
-    return queryOne(
+    const hit = await queryOne(
       "SELECT bnp_record_id, title, subtitle, authors, publisher, place, year, " +
         "edition, pages, language, isbn13, isbn10, deposito_legal FROM editions " +
         "WHERE deposito_legal = ? LIMIT 1",
       [dl]
     );
+    if (hit) return hit;
+
+    const alt = altYearSpelling(dl);
+    if (!alt) return null;
+    return queryOne(
+      "SELECT bnp_record_id, title, subtitle, authors, publisher, place, year, " +
+        "edition, pages, language, isbn13, isbn10, deposito_legal FROM editions " +
+        "WHERE deposito_legal = ? LIMIT 1",
+      [alt]
+    );
+  }
+
+  // "166353/01" -> "166353/2001", and back. Returns null when there's no
+  // other spelling to try (unparseable, or already the only form).
+  function altYearSpelling(dl) {
+    const m = /^(\d+)\/(\d{2}|\d{4})$/.exec(dl || "");
+    if (!m) return null;
+    const full = App.util.yearFromDL(dl);
+    if (!full) return null;
+    const alt = m[2].length === 4 ? full.slice(2) : full;
+    return alt === m[2] ? null : m[1] + "/" + alt;
   }
 
   // Best-effort local ISBN lookup: try 13 first, then 10.

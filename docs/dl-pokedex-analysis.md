@@ -106,6 +106,78 @@ snapshot-staleness gap against. The UI is deliberately worded to say
 global total, and `{count}` is deduped by DL value per the series-sharing
 caveat above.
 
+## DL now outranks ISBN in the resolution ladder (changed 2026-08-30)
+
+Prompted by a field observation across several test books: **a later edition
+keeps the outer cover's original ISBN but carries a new Depósito Legal.** That
+matches how the two identifiers are assigned — DL is issued per deposit event,
+so each edition and reimpressão gets its own, while Portuguese publishers
+routinely reuse a cover ISBN across reprints. So the ISBN answers "what title
+is this", and the DL answers "which printing am I actually holding".
+
+For a project whose spine *is* the DL sequence, the second question is the one
+that matters, and the old ordering got it wrong in a way that reached the
+visualizations, not just the metadata:
+
+- `js/ladder.js`'s `resolveFromPhoto` checked ISBN first and returned from
+  that branch, so a ficha técnica carrying both never reached the DL lookup —
+  and `draft.detected_dl` was never set, silently discarding a DL the OCR pass
+  had already extracted.
+- `renderDexCompletion` and `renderDiscoveryGrid` both keyed off
+  `edition.deposito_legal` — the DL of whichever catalogue row the lookup
+  returned. All three `catalogue.js` lookups are `LIMIT 1` with no `ORDER BY`.
+  So scanning a 3rd edition could plot the **1st edition's** square.
+
+What changed:
+
+1. **`resolveFromPhoto` tries DL before ISBN**, and records *both* detected
+   identifiers regardless of which resolves. A plausible DL that matches
+   nothing falls through to the ISBN for bibliographic detail rather than
+   dead-ending — that's the catalogue-gap case (`docs/catalogue-gaps.md`), not
+   a failure — while keeping `detected_dl` on the encounter.
+2. **DL has to earn the promotion.** Unlike ISBN it has no check digit, so
+   `App.util.dlIsPlausible` gates it: parseable ordinal, year in 1930..now,
+   and under the same `DL_NUM_CEILING = 600000` used by `build_index.py`. An
+   implausible DL is still recorded, it just doesn't outrank a checksum-valid
+   ISBN. Real garbage this catches: `691001/93`.
+3. **The DL label regex was tightened first.** `DL_LABEL_RE`'s bare `d.?\s*l.?`
+   alternative had no word boundaries, so the letters inside "handled",
+   "middle" and "kindle" satisfied it, as did the honorific in "D. Luís" — and
+   any `NNNN/YY` nearby was then accepted. Harmless while ISBN went first and a
+   bogus DL only lost the race; a live misidentification bug once DL wins.
+4. **`lookupByDL` now tries both year spellings.** BNP writes the same
+   registration as `378724/1979` on some rows and `378724/79` on others, and
+   the lookup is an exact string `=`. Tolerable as a fallback path, not as the
+   primary one. `App.util.dlKey` normalizes for comparison and now dedupes the
+   completion card, which previously counted the two spellings as two books.
+5. **The discovery grid reads the book's own DL** (`detected_dl`) in preference
+   to the matched row's. Side effect worth having: rung-3 catalogue-gap finds —
+   a genuine DL that matched nothing — appear on the grid at all, which they
+   never did before.
+6. **The completion card deliberately does NOT** switch to `detected_dl`. Its
+   denominator is "distinct book DLs in the shipped snapshot", so its numerator
+   has to stay inside that population. The grid asks *where in the registry was
+   this book*; the card asks *how much of the shipped snapshot have you
+   covered*. Different questions, different keys.
+
+**Rung numbers were deliberately not renumbered.** They are persisted IDs — an
+IndexedDB index, a field in the JSON export with no version-aware remap on
+import, the log filter chips, the CSS badge classes — and `DB_VERSION` is 1
+with no `onupgradeneeded` migration path. Renumbering would silently rewrite
+the meaning of every encounter already saved, including the rung distribution
+the spec calls "the main thing this pilot is meant to measure". So 1–5 stay as
+opaque method IDs and only the preference order moved; the stats chart, the
+filter chips and the badge colour ramp were reordered to display in preference
+order instead.
+
+Verified against the real shipped catalogue via two throwaway Playwright
+scripts in the gitignored `data/` scratch dir (`check_dl_priority.js`, 17
+checks: label false positives, the plausibility guard, year-spelling
+round-trip; `check_dl_ladder.js`, 13 checks: the conflict case resolving to
+the DL's record, garbage-DL fallthrough, grid bucketing). Both green. The
+load-bearing one: OCR text pairing record 1868's ISBN with record 2874's DL
+resolves to **2874** — the printing in hand, not the one the barcode names.
+
 ## The discovery-grid filmstrip (shipped 2026-08-22)
 
 A second visualization, added after discussing what a Pokédex-style

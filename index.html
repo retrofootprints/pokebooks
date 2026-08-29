@@ -135,12 +135,15 @@
            data-i18n-placeholder="logSearchPlaceholder"
            placeholder="Search title, author, note…" autocomplete="off">
 
-    <!-- Rung filter (how it was identified). -->
+    <!-- Rung filter (how it was identified). Listed in the ladder's order of
+         preference, which is NOT the numeric order of data-rung: those
+         numbers are stable persisted IDs and Depósito Legal (3) now outranks
+         ISBN (2). See js/ladder.js. -->
     <div class="log-filters" id="log-filters">
       <span class="chip selected" data-rung="all" data-i18n="filterAll">all</span>
+      <span class="chip" data-rung="3" data-i18n="rungDl">Depósito Legal</span>
       <span class="chip" data-rung="1" data-i18n="rungBarcode">Barcode</span>
       <span class="chip" data-rung="2" data-i18n="rungIsbn">Printed ISBN</span>
-      <span class="chip" data-rung="3" data-i18n="rungDl">Depósito Legal</span>
       <span class="chip" data-rung="4" data-i18n="rungTitleMatch">Title match</span>
       <span class="chip" data-rung="5" data-i18n="rungManual">Logged by hand</span>
     </div>

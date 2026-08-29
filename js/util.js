@@ -93,7 +93,18 @@ App.util = (function () {
   // Permissive Deposito Legal extraction. Real-world label variants:
   // "Deposito Legal", "Deposito legal", "Dep. Legal", "D.L.", "DL", with or
   // without "n.o" / "no" / "N.o", number may carry internal spaces.
-  const DL_LABEL_RE = /dep[oó]sito\s*legal|dep\.?\s*legal|d\.?\s*l\.?/i;
+  //
+  // The boundaries on the bare "D.L." alternative are load-bearing, not
+  // decoration. Without the leading \b it matches the letters inside
+  // ordinary words — "handled", "middle", "kindle" all contain "dl" — and
+  // without the trailing lookahead it matches the Portuguese honorific in
+  // "D. Luís" / "D. Leonor". Either way any NNNN/YY-shaped number on that
+  // line (or within the next 60 chars) then gets accepted as a Depósito
+  // Legal. That was survivable while ISBN was checked first and a bogus DL
+  // only ever lost the race; now that DL outranks a checksum-valid ISBN
+  // (see ladder.js), a false positive here actively misidentifies the book.
+  const DL_LABEL_RE =
+    /\bdep[oó]sito\s*legal\b|\bdep\.?\s*legal\b|\bd\.?\s*l\.?(?![a-zà-ÿ])/i;
   // Primary: requires the "/" between number and year — reliable, low
   // false-positive risk.
   const DL_NUM_STRICT_RE = /(\d[\d\s]{2,7}\d)\s*\/\s*(\d{2,4})\b/;
@@ -227,6 +238,43 @@ App.util = (function () {
     return Number.isFinite(n) ? n : null;
   }
 
+  // Mirrors DL_NUM_CEILING in scripts/build_index.py — keep the two in step.
+  // A deliberately round hand-picked ceiling rather than a percentile: the
+  // registry's real counter sits around 560-570k for recent years, and BNP's
+  // own export carries a small amount of garbage that a percentile cutoff
+  // doesn't cleanly separate. See docs/dl-pokedex-analysis.md.
+  const DL_NUM_CEILING = 600000;
+
+  // Is this DL string trustworthy enough to *outrank a checksum-valid ISBN*?
+  // That's the bar, and it's why this exists: unlike ISBN, Depósito Legal
+  // has no check digit, so shape-matching is all the extraction can do. This
+  // is the cheapest available stand-in — a parseable ordinal, and a year in
+  // the range the registry actually covers. Catches real garbage found in
+  // BNP's own data, e.g. "691001/93" (1993's true range tops out near
+  // 73,000). A DL that fails this is still worth *recording* on the
+  // encounter; it just doesn't get to decide what the book is.
+  function dlIsPlausible(dl) {
+    const num = dlNumber(dl);
+    if (num === null || num <= 0 || num >= DL_NUM_CEILING) return false;
+    const year = Number(yearFromDL(dl));
+    if (!Number.isFinite(year)) return false;
+    return year >= 1930 && year <= new Date().getFullYear();
+  }
+
+  // Comparison key for two DL strings that name the same registration.
+  // BNP's export carries both "378724/1979" and "378724/79" spellings (see
+  // docs/bnp-findings.md), and yearFromDL already knows the century pivot,
+  // so normalize to the 4-digit form. Used for catalogue lookup fallback
+  // (js/catalogue.js) and for deduping the dex count (js/ui.js), both of
+  // which previously compared raw strings and so treated the two spellings
+  // as different books.
+  function dlKey(dl) {
+    const num = dlNumber(dl);
+    const year = yearFromDL(dl);
+    if (num === null || !year) return dl || null;
+    return num + "/" + year;
+  }
+
   function extractYearFallback(text) {
     const years = [];
     const re = /\b(19[0-9]{2}|20[0-2][0-9])\b/g;
@@ -341,6 +389,7 @@ App.util = (function () {
     stripDiacritics, normText, onlyDigitsX,
     validIsbn13, validIsbn10, isbn10ToIsbn13, isbn13ToIsbn10,
     extractIsbnFromText, extractDLFromText, extractFichaTecnicaFields, validEan13,
-    roundCoord, toast, toastAction, fmtDate, blobToBase64, base64ToBlob, dlNumber,
+    roundCoord, toast, toastAction, fmtDate, blobToBase64, base64ToBlob,
+    dlNumber, dlIsPlausible, dlKey, yearFromDL,
   };
 })();

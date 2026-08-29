@@ -72,6 +72,16 @@ App.ocr = (function () {
   // onAttempt(degrees, index, total), if given, fires before each pass —
   // used to keep the UI's status line honest about what's actually
   // happening instead of one long unexplained wait.
+  //
+  // Known limitation, accepted rather than fixed: this returns on the first
+  // rotation yielding EITHER identifier, so an ISBN read cleanly at 0° stops
+  // the search before a Depósito Legal that only resolves at 90°. Since
+  // ladder.js now prefers DL over ISBN, that costs a preference it would
+  // otherwise have honoured. Left alone because on a ficha técnica both are
+  // printed in the same orientation, so they come out of the same pass — and
+  // the alternative (keep scanning after an ISBN hit, hunting for a DL)
+  // would pay up to 4x the OCR time on every ISBN-only book to catch a case
+  // that shouldn't arise. Worth revisiting only if real captures show it.
   async function recognizeBestRotation(blob, onAttempt) {
     const worker = await getWorker();
     let best = null;

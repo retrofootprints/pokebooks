@@ -69,6 +69,19 @@ App.ui = (function () {
     return hasIdentifier && identifierRung && noMatch;
   }
 
+  // True when the encounter's Depósito Legal was INHERITED from a catalogue
+  // row rather than read off the book — i.e. a barcode scan, where the only
+  // identifier available is the cover ISBN. Publishers reuse a cover ISBN
+  // across reimpressões while each deposit gets its own DL, so the matched
+  // row may well describe a different printing than the copy in hand. The
+  // encounter is still perfectly valid; the printing just isn't pinned, and
+  // saying so is more honest than showing a DL that was never verified
+  // against the book. Derived from stored fields, so it reads correctly on
+  // encounters saved before this existed.
+  function printRunUnconfirmed(e) {
+    return e.resolution_rung === 1 && !e.detected_dl && !!(e.edition && e.edition.deposito_legal);
+  }
+
   function fieldRow(k, v) {
     if (!v) return "";
     return `<div class="field-row"><span class="k">${escapeHtml(k)}</span><span class="v">${escapeHtml(String(v))}</span></div>`;
@@ -172,6 +185,9 @@ App.ui = (function () {
       html += fieldRow(t("fieldPages"), e.pages);
       html += fieldRow(t("fieldIsbn"), formatIsbn(e));
       html += fieldRow(t("fieldDepositoLegal"), e.deposito_legal);
+      if (printRunUnconfirmed(draft)) {
+        html += `<p class="source-note">${escapeHtml(t("printRunUnconfirmed"))}</p>`;
+      }
       html += `<div class="source-note">${escapeHtml(t("sourceNote", { source: e.source || "unknown" }))}</div>`;
     } else if (draft.resolution_rung === 4 && draft.candidates && draft.candidates.length) {
       html += `<p>${escapeHtml(t("candidatesIntro"))}</p>`;
@@ -368,6 +384,9 @@ App.ui = (function () {
       html += fieldRow(t("fieldPages"), ed.pages);
       html += fieldRow(t("fieldIsbn"), formatIsbn(ed));
       html += fieldRow(t("fieldDepositoLegal"), ed.deposito_legal);
+      if (printRunUnconfirmed(e)) {
+        html += `<p class="source-note">${escapeHtml(t("printRunUnconfirmed"))}</p>`;
+      }
     } else {
       html += `<p class="source-note">${escapeHtml(t("unidentifiedEncounter"))}</p>`;
     }
@@ -424,9 +443,24 @@ App.ui = (function () {
       el.innerHTML = `<div class="dex-card empty">${escapeHtml(t("dexCompletionUnavailable"))}</div>`;
       return;
     }
+    // Deliberately keyed on the CATALOGUE's DL, not the one OCR read off
+    // the book — the opposite of renderDiscoveryGrid below, and not an
+    // oversight. The denominator here is "distinct book DLs in the shipped
+    // snapshot," so the numerator has to stay inside that same population;
+    // counting a DL that isn't in the snapshot (the catalogue-gap case)
+    // would measure the numerator against a denominator that excludes it.
+    // The grid asks "where in the registry was this book?", this card asks
+    // "how much of the shipped snapshot have you covered?" — different
+    // questions, so different keys.
+    //
+    // Deduped through App.util.dlKey rather than by raw string: BNP writes
+    // the same registration as both "378724/1979" and "378724/79", which a
+    // raw-string Set counts as two books.
     const dlKeys = new Set();
     encounters.forEach((e) => {
-      if (e.edition && e.edition.deposito_legal) dlKeys.add(e.edition.deposito_legal);
+      if (e.edition && e.edition.deposito_legal) {
+        dlKeys.add(App.util.dlKey(e.edition.deposito_legal));
+      }
     });
     const count = dlKeys.size;
     const total = stats.book_dl_count;
@@ -471,7 +505,16 @@ App.ui = (function () {
     const numBuckets = Math.max(1, Math.ceil(stats.dl_max / DISCOVERY_BUCKET_SIZE));
     const counts = new Array(numBuckets).fill(0);
     encounters.forEach((e) => {
-      const dl = e.edition && e.edition.deposito_legal;
+      // The DL read off the book wins over the one on the matched catalogue
+      // row. They differ exactly when the ISBN resolved a different printing
+      // than the one in hand — publishers reuse a cover ISBN across
+      // reimpressões while each deposit gets its own DL — and in that case
+      // the catalogue row's DL would place the book at the wrong point in
+      // the sequence. This also makes rung-3 catalogue-gap finds (a real DL
+      // that matched nothing) appear on the grid, which they never did.
+      const dl =
+        (App.util.dlIsPlausible(e.detected_dl) && e.detected_dl) ||
+        (e.edition && e.edition.deposito_legal);
       const num = App.util.dlNumber(dl);
       if (num === null) return;
       const bucket = Math.min(numBuckets - 1, Math.floor(num / DISCOVERY_BUCKET_SIZE));
@@ -515,7 +558,12 @@ App.ui = (function () {
       rungCounts[e.resolution_rung] = (rungCounts[e.resolution_rung] || 0) + 1;
       if (e.context) contextCounts[e.context] = (contextCounts[e.context] || 0) + 1;
       if (e.edition) {
-        const key = e.edition.isbn13 || e.edition.deposito_legal || e.edition.bnp_record_id || e.edition.title;
+        // DL before ISBN, matching the ladder's preference: two printings of
+        // the same title share a cover ISBN but carry different DLs, so an
+        // ISBN-first key silently collapses them into one "distinct edition".
+        const key =
+          (e.edition.deposito_legal && App.util.dlKey(e.edition.deposito_legal)) ||
+          e.edition.isbn13 || e.edition.bnp_record_id || e.edition.title;
         if (key) editionKeys.add(key);
       }
     });
@@ -535,8 +583,14 @@ App.ui = (function () {
       <div class="stat-tile"><div class="num">${total - unidentified}</div><div class="label">${escapeHtml(t("statIdentified"))}</div></div>
     `;
 
+    // Display order, not numeric order — the rung NUMBERS are stable
+    // persisted IDs (see ladder.js), while the ladder now prefers Depósito
+    // Legal (3) over ISBN (2). Listing them in preference order keeps the
+    // chart reading top-to-bottom as "strongest identification first",
+    // matching the filter chips in index.html.
+    const RUNG_DISPLAY_ORDER = [3, 1, 2, 4, 5];
     const maxRung = Math.max(1, ...Object.values(rungCounts));
-    document.getElementById("rung-bars").innerHTML = [1, 2, 3, 4, 5]
+    document.getElementById("rung-bars").innerHTML = RUNG_DISPLAY_ORDER
       .map((r) => {
         const count = rungCounts[r] || 0;
         const pct = Math.round((count / maxRung) * 100);

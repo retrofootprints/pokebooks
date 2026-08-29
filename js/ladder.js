@@ -11,6 +11,24 @@
 // local catalogue or network. If lookup comes up empty, the draft's
 // `edition` stays null and the user fills in details by hand from the same
 // form (see ui.js).
+//
+// RUNG NUMBERS ARE STABLE IDS, NOT A RANKING. They are persisted (an
+// IndexedDB index in idb.js, a field in the JSON export with no
+// version-aware remap on import) and hard-coded in the log filter chips,
+// the CSS badge classes and the stats bar chart. Renumbering them would
+// silently rewrite the meaning of every encounter already saved. The order
+// of PREFERENCE lives only in resolveFromPhoto below, and is:
+//
+//   Depósito Legal  >  ISBN
+//
+// which is the reverse of the numbering, and deliberate. DL is assigned per
+// deposit event, so a 2nd/3rd edition gets a new one; Portuguese publishers
+// routinely reuse the same cover ISBN across reimpressões. So the ISBN
+// answers "what title is this", while the DL answers "which printing am I
+// actually holding" — and the latter is what this project is built around
+// (it's the dex ordinal behind the completion card and the discovery grid).
+// DL also out-covers ISBN in every decade since 1980 in the BNP data. See
+// docs/dl-pokedex-analysis.md.
 window.App = window.App || {};
 
 App.ladder = (function () {
@@ -77,10 +95,11 @@ App.ladder = (function () {
     return draft;
   }
 
-  // Rungs 2-4: OCR the captured barcode/copyright-page photo, try ISBN,
-  // then Depósito Legal, then (network-only) a title/author search. Returns
+  // Rungs 2-4: OCR the captured barcode/copyright-page photo, try Depósito
+  // Legal, then ISBN, then (network-only) a title/author search. Returns
   // whichever rung matched first, always including the raw OCR text for
-  // the record either way.
+  // the record either way. Note the rung numbers do not run in that order —
+  // see the header comment on why they're stable IDs rather than a ranking.
   //
   // idPhotoBlob is the resized/compressed identification-page frame — kept
   // on the draft (not the encounter's own keepsake photo_blob, which
@@ -109,9 +128,41 @@ App.ladder = (function () {
     // or network record, but there's no harm in having it ready either way.
     draft.suggestedFields = App.util.extractFichaTecnicaFields(result.text, result.dl);
 
+    // Record BOTH identifiers whenever OCR found them, independent of which
+    // one goes on to resolve the book. The previous version returned from
+    // the ISBN branch without ever setting detected_dl, silently discarding
+    // a Depósito Legal it had already extracted — which mattered because
+    // the DL printed in the book is the one thing that pins the print run.
+    if (result.isbn) draft.detected_isbn = result.isbn.isbn13;
+    if (result.dl) draft.detected_dl = result.dl;
+
+    // DL first — but only a plausible one. See the header comment for why
+    // DL outranks ISBN, and App.util.dlIsPlausible for why it has to earn
+    // that rather than simply win by position.
+    //
+    // Note what the guard does and doesn't decide: it governs PRECEDENCE
+    // over a checksum-valid ISBN, not whether the DL is worth looking up at
+    // all. A DL that fails it still gets its lookup below when no ISBN is
+    // competing — outlier values like "691001/93" are real rows in BNP's own
+    // export, so a book that genuinely prints one should still match.
+    const dlTried = !!result.dl && App.util.dlIsPlausible(result.dl);
+    if (dlTried) {
+      const edition = await resolveDL(result.dl);
+      if (edition) {
+        draft.resolution_rung = 3;
+        draft.edition = edition;
+        draft.source = edition.source;
+        return draft;
+      }
+      // A plausible DL that matched nothing is not a dead end — it's the
+      // catalogue-gap case (registered with BNP, not yet in the published
+      // catalogue; see docs/catalogue-gaps.md). Fall through to the ISBN
+      // for bibliographic detail, keeping detected_dl on the record so the
+      // discovery grid can still place the book in the DL sequence.
+    }
+
     if (result.isbn) {
       draft.resolution_rung = 2;
-      draft.detected_isbn = result.isbn.isbn13;
       const edition = await resolveIsbn(result.isbn.isbn13, result.isbn.isbn10);
       if (edition) {
         draft.edition = edition;
@@ -122,11 +173,14 @@ App.ladder = (function () {
 
     if (result.dl) {
       draft.resolution_rung = 3;
-      draft.detected_dl = result.dl;
-      const edition = await resolveDL(result.dl);
-      if (edition) {
-        draft.edition = edition;
-        draft.source = edition.source;
+      // Only look up now if the DL-first branch didn't already — otherwise
+      // its miss is known and repeating the query buys nothing.
+      if (!dlTried) {
+        const edition = await resolveDL(result.dl);
+        if (edition) {
+          draft.edition = edition;
+          draft.source = edition.source;
+        }
       }
       return draft;
     }

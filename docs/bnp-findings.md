@@ -217,3 +217,160 @@ suggested:
   and the rarer `NNNNNN/YYYY` form seen in the sample.
 - Read the file with `errors="replace"` given the scattered invalid UTF-8
   bytes; don't assume a single clean encoding.
+
+---
+
+# Addendum — the URN network path (2026-08-19, extended 2026-08-31)
+
+`js/network.js` has cited "docs/bnp-findings.md addendum" for the CORS finding
+since August; this is that addendum, finally written, plus what a follow-up
+investigation turned up when someone asked how a CORS proxy would work.
+
+## 1. CORS (tested 2026-08-19)
+
+- `urn.bnportugal.gov.pt` and `urn.porbase.org` send **no**
+  `Access-Control-Allow-Origin` header. Browser fetches fail with an opaque
+  CORS error even though the endpoints work fine server-side.
+- `openlibrary.org` and `covers.openlibrary.org` send
+  `access-control-allow-origin: *`. **They are the only network sources this
+  pilot can reach client-side.**
+
+This is what the spec's "test early... that's the one thing that would later
+force a tiny proxy" warning was about. It stands.
+
+## 2. The URLs were also wrong — CORS was masking a second bug
+
+Tested server-side 2026-08-31, where CORS does not apply:
+
+```
+https://urn.bnportugal.gov.pt/isbn/9789726840282
+  -> <error>Pedido inválido - não contém forma</error>
+```
+
+The app's assumed `/{scheme}/{value}` shape **is not the interface**. The real
+one is `/{scheme}/{schema}/{serialization}?id={value}`:
+
+```
+https://urn.bnportugal.gov.pt/isbn/mods/xml?id=9789724121741
+  -> full MODS record: "A nuvem cor-de-rosa", Arsénio Mota, Asa, 2008, 4ª ed
+```
+
+So **the BNP/PORBASE fallback would have returned nothing even with a working
+proxy.** Two independent faults, one masking the other.
+
+Also established:
+
+- **Unhyphenated ISBNs work.** Both `978-972-41-2174-1` and `9789724121741`
+  resolve. No hyphenation step, and no ISBN registrant-range tables, needed —
+  that would have been a real cost.
+- **PORBASE uses the identical interface** and also returns MODS.
+- Per `acesso.urn`, identifier spaces are: record id, call number (cota),
+  **legal deposit number**, ISBN, ISSN, PURL. Schemas: UNIMARC, Dublin Core,
+  Dublin Core Qualified, MODS. Serializations: text, XML, MarcXChange, ISBD,
+  ISO 2709, RDF.
+
+## 3. `parseUrnXml` would have half-failed on real data
+
+It was written blind against a guessed schema (CORS meant no real response was
+ever seen). MODS nests everything, so of its lookups:
+
+| Looks for | Real MODS | Result |
+|---|---|---|
+| `title` | `titleInfo > title` | works by luck |
+| `publisher` | `originInfo > publisher` | works by luck |
+| `place` | `originInfo > place > placeTerm` | works by luck |
+| `author` / `autor` | `name > namePart` | **empty** |
+| `date` / `data` | `originInfo > dateIssued\|dateOther` | **empty** |
+
+Every lookup would have silently produced an edition with no author and no
+year. Rewritten against the real response.
+
+**Non-filing characters leak into titles.** PORBASE returns
+`"?A ?nuvem cor-de-rosa"` — UNIMARC NSB/NSE sort markers transcoded to `?`,
+wrapping the article "A ". BNP returns `"À nuvem cor-de-rosa"` for the same
+ISBN. Any parser must strip the paired markers.
+
+## 4. `identifier type="stock"` IS the Depósito Legal — confirmed
+
+The live record carries `<identifier type="stock">PT - 272507/08</identifier>`.
+Cross-checked against our own build: BNP record `1731654` has
+`deposito_legal = 272507/08`. Exact match. The shelf mark (cota) is separately
+in `location > physicalLocation` (`P. 27550 V.`), so `stock` is not the cota.
+
+**But the DL *input* scheme name is still unknown.** `/dl/`, `/depositolegal/`
+and `/stock/` all 404 against `/{scheme}/mods/xml?id=`. So DL is readable in
+the *output* but not yet queryable as an *input*. Getting this is a
+prerequisite for any DL network lookup; it needs the option values from the
+`acesso.urn` form, or an email.
+
+## 5. One ISBN, many printings — the reimpressão claim, now measured
+
+Prompted by a field observation that later editions keep the cover ISBN but
+carry a new DL. Never previously measured. Against the shipped build:
+
+| | count | share |
+|---|---:|---:|
+| Rows with an ISBN-13 | 391,501 | |
+| Distinct ISBN-13 | 332,632 | |
+| ISBN-13 appearing on >1 row | 29,856 | 9.0% of distinct |
+| **Rows sharing an ISBN-13** | **88,725** | **22.7% of ISBN-bearing rows** |
+| ISBN-13 mapping to >1 *distinct DL* | 19,071 | 6.7% of DL-bearing ISBNs |
+
+Worst offender: `9789722323970` spans **53 distinct DL numbers**.
+
+The worked example is the record above. ISBN `9789724121741` resolves to four
+rows in our own catalogue:
+
+| record | edition | year | Depósito Legal |
+|---|---|---:|---|
+| 1060709 | 3ª ed | 2001 | 142747/99 |
+| 1731654 | 4ª ed | 2008 | 272507/08 |
+| 1764136 | 5ª ed | 2009 | 290573/09 |
+| 1783350 | 6ª ed | 2010 | 308831/10 |
+
+One ISBN, four printings, four DLs. `catalogue.js`'s lookups are `LIMIT 1`
+with no `ORDER BY`, so a barcode scan of this book returns an arbitrary one of
+the four — and BNP's own resolver likewise picks one (it returns the 4ª ed).
+**This is the empirical basis for preferring DL over ISBN in the resolution
+ladder** (see `docs/dl-pokedex-analysis.md`); the claim previously rested on
+field observation alone.
+
+## 6. What a proxy would and would not buy
+
+Mechanically trivial: CORS is browser-enforced, server-to-server is not, so
+any server you control that refetches and attaches
+`Access-Control-Allow-Origin` solves it — a Cloudflare Worker on its own
+origin, or moving hosting to CF Pages / Netlify / Vercel so the function sits
+same-origin at `/api/` and CORS never applies. **Constraint:** whatever hosts
+the site must honour HTTP `Range`, since the app streams a 338 MB SQLite in
+4 KB slices out of 20 MB chunks.
+
+Non-obvious points worth keeping:
+
+- **Cache hard at the proxy.** Records for a given identifier never change,
+  and BNP is a small public institution.
+- **A proxy is the only place the spec's User-Agent instruction is
+  actionable.** Browsers forbid scripts setting `User-Agent` (forbidden header
+  per Fetch), which is why `OL_UA` in `network.js` is unused.
+- **Never accept a target URL as a parameter.** Whitelist path shapes and
+  rate-limit, or it's an open relay.
+
+**The honest limit:** the resolver queries BNP's *catalogue*, not the deposit
+registry. A proxy would close the *snapshot staleness* gap (books catalogued
+since the last manual pull) but **not** the *cataloguing backlog* gap — the
+cases in `docs/catalogue-gaps.md` stay invisible either way.
+
+## 7. Two asks for the OpendataBNP email
+
+Ready to append to the email already queued (which carries the header-column
+bug and the truncated-UTF-8 bug):
+
+1. **Please send `Access-Control-Allow-Origin` on the URN resolver.** It would
+   let any browser-based reuse hit it directly and removes the need for anyone
+   to run a proxy.
+2. **What is the scheme name for Depósito Legal?** The docs list it as a
+   supported identifier space, but no guessed name resolves.
+
+Worth noting alongside: `<identifier type="uri">` in live records carries
+`http://id.bnportugal.gov.pt/bib/catbnp/{id}`, corroborating the 100%-filled
+`Persistent URL` column that `build_index.py` currently does not store.

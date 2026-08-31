@@ -2,15 +2,26 @@
 // 4, which is network-only — see catalogue.js for why local fuzzy search
 // was dropped).
 //
-// CORS finding (tested 2026-08-19, see docs/bnp-findings.md addendum):
-//   - urn.bnportugal.gov.pt and urn.porbase.org: no
-//     Access-Control-Allow-Origin header. Browser fetches to these WILL
-//     fail with an opaque CORS error, even though the endpoints work fine
-//     server-side (confirmed via curl: GET .../isbn/<isbn> returns XML).
-//     They're still attempted here in case that changes; failures are
-//     swallowed silently and the ladder just moves on. A same-origin proxy
-//     would be needed to actually use these from a static GitHub Pages
-//     site — explicitly out of scope for this pilot per the spec.
+// THE BNP/PORBASE PATH IS UNREACHABLE FROM A BROWSER. It is kept, and kept
+// correct, but nothing here enables it. Two independent faults, one of which
+// was masking the other (full write-up: docs/bnp-findings.md, addendum):
+//
+//   1. CORS (tested 2026-08-19). urn.bnportugal.gov.pt and urn.porbase.org
+//      send no Access-Control-Allow-Origin header, so browser fetches fail
+//      with an opaque CORS error even though the endpoints work fine
+//      server-side. Failures are swallowed and the ladder moves on.
+//   2. The URLs were wrong (found 2026-08-31, testing server-side where
+//      CORS doesn't apply). The old `/{scheme}/{value}` shape returns
+//      "Pedido inválido - não contém forma" — it is not the interface. The
+//      real one is `/{scheme}/{schema}/{serialization}?id={value}`. So this
+//      fallback would have returned nothing even with a working proxy.
+//
+// Fault 2 is fixed below and fault 1 is not, so these calls still never
+// succeed in the browser — but they are now correct for whenever CORS is
+// solved (a proxy, or BNP simply sending the header, which is a pending ask).
+// Do not read a passing test as evidence this path works end to end; it
+// cannot be exercised end to end from a page.
+//
 //   - openlibrary.org and covers.openlibrary.org: send
 //     `access-control-allow-origin: *`. These work directly from the
 //     browser and are the only network sources this pilot can actually
@@ -33,43 +44,113 @@ App.network = (function () {
     }
   }
 
-  function parseUrnXml(text) {
-    // BNP/PORBASE urn-response XML. Kept defensive since we've never seen
-    // a real non-error response (CORS blocks it in-browser) — this is
-    // best-effort for if a future proxy or CORS change makes it reachable.
+  // UNIMARC non-filing-character markers (NSB/NSE) wrap a leading article so
+  // it sorts under the next word. PORBASE leaks them transcoded to "?" —
+  // "?A ?nuvem cor-de-rosa" — where BNP returns "À nuvem cor-de-rosa" for the
+  // same ISBN. Strip only the PAIRED signature (leading marker, a short
+  // article, closing marker) rather than every "?", so a title that genuinely
+  // contains a question mark survives.
+  function stripNonFiling(s) {
+    if (!s) return "";
+    return s
+      .replace(/[\u0088\u0089\u0098\u009C]/g, "")
+      .replace(/^\?(.{1,9}?)\?/, "$1")
+      .trim();
+  }
+
+  // Parses a MODS record from the BNP/PORBASE URN resolver into the same
+  // edition shape catalogue.js's rowToEdition produces.
+  //
+  // Written against real captured responses (see docs/bnp-findings.md
+  // addendum), replacing a version written blind against a guessed schema —
+  // that one looked for flat <author>/<date> elements which don't exist in
+  // MODS, so it silently returned an edition with no author and no year on
+  // every lookup.
+  function parseUrnXml(text, source) {
     try {
       const doc = new DOMParser().parseFromString(text, "application/xml");
       if (doc.querySelector("parsererror")) return null;
+      // "Registo inexistente" (valid request, no match) and "Pedido inválido"
+      // (malformed request) both come back as <error> with HTTP 200.
       if (doc.querySelector("error")) return null;
-      const get = (tag) => doc.querySelector(tag)?.textContent?.trim() || "";
-      const title = get("title") || get("titulo");
+
+      const txt = (el) => (el && el.textContent ? el.textContent.trim() : "");
+      const one = (sel) => txt(doc.querySelector(sel));
+      const all = (sel) => Array.from(doc.querySelectorAll(sel));
+
+      const title = stripNonFiling(one("mods > titleInfo > title"));
       if (!title) return null;
+
+      // Prefer the structured personal names over the free-text displayForm:
+      // displayForm is a single transcribed statement of responsibility
+      // ("Arsénio Mota ; il. Júlio Resende"), while namePart gives each
+      // agent separately in indexed form ("Mota, Arsénio, 1930-").
+      let authors = all("mods > name[type='personal'] > namePart")
+        .map(txt)
+        .filter(Boolean)
+        .join(" ; ");
+      if (!authors) authors = txt(doc.querySelector("mods > name > displayForm"));
+
+      // Two <place> blocks appear: the city, then the ISO country. Take the
+      // first text-form term, which is the city.
+      const place = txt(
+        doc.querySelector("mods > originInfo > place > placeTerm:not([authority='iso-3166'])")
+      );
+
+      // dateOther carries the plain year ("2008"); dateIssued is a full date
+      // ("2008-01-01"). Either way the app only wants the year.
+      const rawYear = one("mods > originInfo > dateOther") || one("mods > originInfo > dateIssued");
+      const yearMatch = /\b(\d{4})\b/.exec(rawYear || "");
+
+      const isbnRaw = one("mods > identifier[type='isbn']");
+      const isbn13 = isbnRaw ? isbnRaw.replace(/[^0-9Xx]/g, "") : "";
+
       return {
+        bnp_record_id: one("mods > recordInfo > recordIdentifier"),
         title,
-        authors: get("author") || get("autor"),
-        publisher: get("publisher") || get("editor"),
-        place: get("place") || get("local"),
-        year: get("date") || get("data"),
+        subtitle: stripNonFiling(one("mods > titleInfo > subTitle")),
+        authors,
+        publisher: one("mods > originInfo > publisher"),
+        place,
+        year: yearMatch ? yearMatch[1] : "",
+        edition: one("mods > originInfo > edition"),
+        pages: one("mods > physicalDescription > extent"),
+        language: one("mods > language > languageTerm[type='code']"),
+        isbn13: isbn13.length === 13 ? isbn13 : "",
+        // NOT mapped: <identifier type="stock">, which holds the Depósito
+        // Legal ("PT - 272507/08", confirmed against our own build — BNP
+        // record 1731654 carries deposito_legal 272507/08). Deliberately left
+        // unset: DL now drives the dex ordinal and the discovery grid, so a
+        // misread of a field whose semantics aren't formally documented would
+        // corrupt exactly the data this project is built on. Map it once BNP
+        // confirms what "stock" means. See docs/bnp-findings.md addendum §4.
+        source: source,
       };
     } catch (err) {
       return null;
     }
   }
 
+  // The URN resolver's request shape, shared by BNP and PORBASE (verified
+  // against both): /{scheme}/{schema}/{serialization}?id={value}. The
+  // "schema/serialization" segments are the "forma" the old URL was missing —
+  // omitting them yields "Pedido inválido - não contém forma", not a record.
+  // ISBNs may be passed unhyphenated (verified), so no hyphenation step and
+  // no ISBN registrant-range tables are needed.
+  function urnIsbnUrl(host, isbn) {
+    return `https://${host}/isbn/mods/xml?id=${encodeURIComponent(isbn)}`;
+  }
+
   async function fetchFromBNP(isbn) {
-    const res = await tryFetch(`https://urn.bnportugal.gov.pt/isbn/${isbn}`);
+    const res = await tryFetch(urnIsbnUrl("urn.bnportugal.gov.pt", isbn));
     if (!res) return null;
-    const text = await res.text();
-    const parsed = parseUrnXml(text);
-    return parsed ? Object.assign(parsed, { source: "bnp-urn" }) : null;
+    return parseUrnXml(await res.text(), "bnp-urn");
   }
 
   async function fetchFromPorbase(isbn) {
-    const res = await tryFetch(`https://urn.porbase.org/isbn/${isbn}`);
+    const res = await tryFetch(urnIsbnUrl("urn.porbase.org", isbn));
     if (!res) return null;
-    const text = await res.text();
-    const parsed = parseUrnXml(text);
-    return parsed ? Object.assign(parsed, { source: "porbase-urn" }) : null;
+    return parseUrnXml(await res.text(), "porbase-urn");
   }
 
   async function fetchFromOpenLibrary(isbn) {
@@ -121,24 +202,27 @@ App.network = (function () {
     return edition;
   }
 
+  // DL-keyed network lookup: NOT IMPLEMENTED, and deliberately not guessed at.
+  //
+  // Only BNP/PORBASE could answer it — OpenLibrary has no concept of Depósito
+  // Legal. BNP's acesso.urn docs do list Legal Deposit Number as a supported
+  // identifier space, but the scheme name it goes by is undocumented and none
+  // of the plausible ones resolve: /dl/, /depositolegal/ and /stock/ all 404
+  // against /{scheme}/mods/xml?id= (tested 2026-08-31). The previous code
+  // shipped `/dl/{value}`, which was wrong twice over — wrong scheme name AND
+  // the old formaless URL shape.
+  //
+  // Returning null outright rather than firing a request known to 404: a
+  // request that cannot succeed is not a fallback, it's a slow no. Asking BNP
+  // for the scheme name is a pending item — see docs/bnp-findings.md addendum
+  // §4 and §7. Note DL *is* present in the response as
+  // <identifier type="stock">, so this is an input-side gap only.
+  //
+  // The cache read is kept so that anything cached by an older build, or by a
+  // future working implementation, still resolves.
   async function lookupByDL(dl) {
-    const cacheKey = `dl:${dl}`;
-    const cached = await App.idb.cacheGet(cacheKey);
-    if (cached) return cached.edition;
-
-    // DL-keyed lookup only makes sense against BNP/PORBASE (OpenLibrary has
-    // no concept of Depósito Legal). Both are CORS-blocked as noted above,
-    // so in practice this will return null until that changes or a proxy
-    // exists — logged honestly rather than pretending it works.
-    const encoded = encodeURIComponent(dl);
-    const res = await tryFetch(`https://urn.bnportugal.gov.pt/dl/${encoded}`);
-    let edition = null;
-    if (res) {
-      const parsed = parseUrnXml(await res.text());
-      edition = parsed ? Object.assign(parsed, { source: "bnp-urn" }) : null;
-    }
-    if (edition) await App.idb.cachePut(cacheKey, edition, edition.source);
-    return edition;
+    const cached = await App.idb.cacheGet(`dl:${dl}`);
+    return cached ? cached.edition : null;
   }
 
   // Rung 4: network-only fuzzy title/author search (local FTS was dropped,

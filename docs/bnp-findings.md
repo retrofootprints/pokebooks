@@ -290,18 +290,35 @@ year. Rewritten against the real response.
 wrapping the article "A ". BNP returns `"À nuvem cor-de-rosa"` for the same
 ISBN. Any parser must strip the paired markers.
 
-## 4. `identifier type="stock"` IS the Depósito Legal — confirmed
+## 4. Depósito Legal is queryable — the scheme is `ndl`
 
-The live record carries `<identifier type="stock">PT - 272507/08</identifier>`.
-Cross-checked against our own build: BNP record `1731654` has
-`deposito_legal = 272507/08`. Exact match. The shelf mark (cota) is separately
-in `location > physicalLocation` (`P. 27550 V.`), so `stock` is not the cota.
+**`identifier type="stock"` IS the Depósito Legal.** The live record carries
+`<identifier type="stock">PT - 272507/08</identifier>`, and our own build has
+`deposito_legal = 272507/08` for BNP record `1731654`. The shelf mark (cota)
+is separately in `location > physicalLocation` (`P. 27550 V.`), so `stock` is
+not the cota.
 
-**But the DL *input* scheme name is still unknown.** `/dl/`, `/depositolegal/`
-and `/stock/` all 404 against `/{scheme}/mods/xml?id=`. So DL is readable in
-the *output* but not yet queryable as an *input*. Getting this is a
-prerequisite for any DL network lookup; it needs the option values from the
-`acesso.urn` form, or an email.
+**The input scheme is `ndl`** (*número de depósito legal*) — undocumented, and
+found by probing (`scripts/probe_urn.py`) after `/dl/`, `/depositolegal/`,
+`/deposito-legal/` and `/stock/` all 404'd. Works on both hosts:
+
+```
+https://urn.bnportugal.gov.pt/ndl/mods/xml?id=272507/08   -> record 1731654, 4ª ed
+https://urn.bnportugal.gov.pt/ndl/mods/xml?id=308831/10   -> record 1783350, 6ª ed
+```
+
+**Those two share ISBN `9789724121741`.** An ISBN query can only return one of
+them arbitrarily; the DL query returns exactly the printing asked for. That is
+this project's whole argument, demonstrated against BNP's own resolver rather
+than inferred — see §5.
+
+It also closes the loop on `stock`: querying *by* a DL returns a record whose
+`stock` *is* that DL. `parseUrnXml` now maps it (stripping the `PT - ` country
+prefix), having deliberately not done so while the semantics rested on a single
+cross-check.
+
+`/cota/` is also a valid scheme (it returns `Registo inexistente` for a DL
+value rather than 404). Untested beyond that.
 
 ## 5. One ISBN, many printings — the reimpressão claim, now measured
 
@@ -360,17 +377,35 @@ registry. A proxy would close the *snapshot staleness* gap (books catalogued
 since the last manual pull) but **not** the *cataloguing backlog* gap — the
 cases in `docs/catalogue-gaps.md` stay invisible either way.
 
-## 7. Two asks for the OpendataBNP email
+## 7. For the OpendataBNP email
 
 Ready to append to the email already queued (which carries the header-column
 bug and the truncated-UTF-8 bug):
 
-1. **Please send `Access-Control-Allow-Origin` on the URN resolver.** It would
-   let any browser-based reuse hit it directly and removes the need for anyone
-   to run a proxy.
-2. **What is the scheme name for Depósito Legal?** The docs list it as a
-   supported identifier space, but no guessed name resolves.
+1. **Please send `Access-Control-Allow-Origin` on the URN resolver.** This is
+   now the *only* thing standing between this app and a working live lookup —
+   the URLs and the DL scheme are both solved. It would let any browser-based
+   reuse hit the resolver directly and remove the need for anyone to run a
+   proxy.
+2. **Please document the identifier scheme names.** `isbn` and `nca` appear in
+   the wild, but `ndl` (Depósito Legal) had to be found by guessing, and it is
+   the most valuable one for anything working with Portuguese books — it is
+   the only identifier that distinguishes printings. `acesso.urn` describes the
+   identifier *spaces* in prose without giving the URL tokens.
 
 Worth noting alongside: `<identifier type="uri">` in live records carries
 `http://id.bnportugal.gov.pt/bib/catbnp/{id}`, corroborating the 100%-filled
 `Persistent URL` column that `build_index.py` currently does not store.
+
+## 8. Where this leaves the code
+
+`js/network.js` now has correct URLs, a parser written against real responses,
+and a working DL lookup on `/ndl/`. **None of it runs**, because CORS still
+blocks all of it from a browser — see the header comment in that file. The
+moment BNP sends the header (or a proxy appears), the path becomes live with
+no further code change. `scripts/probe_urn.py` re-checks all of this,
+including whether the CORS header has appeared.
+
+Captured sample responses are committed at `docs/urn-mods-samples.xml` — the
+app cannot fetch them, so they are the only examples of the format this
+project has.

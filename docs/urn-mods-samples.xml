@@ -1,0 +1,59 @@
+<!--
+  Captured responses from the BNP and PORBASE URN resolvers.
+
+  WHY THESE ARE COMMITTED: the app can never fetch them. Both hosts send no
+  Access-Control-Allow-Origin header, so a browser cannot read these responses
+  at all -- they were captured server-side, where CORS does not apply. Until
+  that changes, these two documents are the only real examples of the format
+  this project has, and js/network.js's parseUrnXml is written against them.
+  If BNP changes its output or the service goes down, this file is the record.
+
+  Captured 2026-08-31. Both are the same book, so the two catalogues can be
+  compared directly:
+
+      https://urn.bnportugal.gov.pt/isbn/mods/xml?id=978-972-41-2174-1
+      https://urn.porbase.org/isbn/mods/xml?id=978-972-41-2174-1
+
+  Request shape is /{scheme}/{schema}/{serialization}?id={value}. Dropping the
+  schema/serialization segments -- as the app's original URLs did -- yields
+  <error>Pedido invalido - nao contem forma</error>, not a record. A valid
+  request with no match yields <error>Registo inexistente</error>. Both arrive
+  with HTTP 200, so status codes cannot be used to tell success from failure.
+
+  THREE THINGS TO NOTICE, all of which parseUrnXml depends on:
+
+  1. There are no flat <author> or <date> elements. MODS nests everything:
+     name > namePart, originInfo > dateIssued|dateOther. The parser that
+     preceded this file guessed at a flat schema and would have returned an
+     edition with no author and no year on every single lookup.
+
+  2. <identifier type="stock">PT - 272507/08</identifier> IS the Deposito
+     Legal -- confirmed against our own build, where BNP record 1731654
+     carries deposito_legal = 272507/08. The shelf mark (cota) is separately
+     in location > physicalLocation. It is deliberately NOT mapped by
+     parseUrnXml: DL drives the dex ordinal, and BNP has not formally
+     documented what "stock" means.
+
+  3. PORBASE leaks UNIMARC non-filing-character markers into the title as
+     "?A ?nuvem cor-de-rosa" (the markers wrap the article "A " so it sorts
+     under "nuvem"), where BNP returns "A nuvem cor-de-rosa". Any parser must
+     strip the paired markers without eating a genuine question mark.
+
+  Note also <identifier type="uri">, which carries the persistent
+  id.bnportugal.gov.pt URI -- the 100%-filled "Persistent URL" column that
+  scripts/build_index.py currently does not store.
+
+  See docs/bnp-findings.md (addendum) for the full write-up.
+-->
+
+<!-- ============================================================ -->
+<!-- 1. BNP  --  urn.bnportugal.gov.pt, record 1731654            -->
+<!-- ============================================================ -->
+<?xml version="1.0" encoding="UTF-8"?><modsCollection xmlns="http://www.loc.gov/mods/v3" xmlns:msxsl="http://xml.apache.org/xslt" xmlns:user="http://www.mind.pt/mynamespace" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.loc.gov/mods/v3 http://www.loc.gov/standards/mods/v3/mods-3-0.xsd"><mods version="3.0"><identifier type="uri">http://id.bnportugal.gov.pt/bib/catbnp/1731654</identifier><identifier type="isbn">978-972-41-2174-1</identifier><identifier type="stock">PT - 272507/08</identifier><titleInfo><title>À nuvem cor-de-rosa</title></titleInfo><name><displayForm>Arsénio Mota ; il. Júlio Resende</displayForm></name><name ID="32604" type="personal"><namePart>Mota, Arsénio, 1930-</namePart><role><roleTerm type="text">creator</roleTerm></role></name><name ID="9690" type="personal"><namePart>Resende, Júlio, pseud.</namePart><description>, il.</description><role><roleTerm type="code">440</roleTerm><roleTerm type="text">contributor</roleTerm></role></name><typeOfResource>Livros</typeOfResource><language><languageTerm authority="iso639-2b" type="code">por</languageTerm><languageTerm type="text">Português</languageTerm></language><originInfo><place><placeTerm type="text">Porto</placeTerm></place><place><placeTerm authority="iso-3166" type="code">PT</placeTerm><placeTerm type="text">Portugal</placeTerm></place><publisher>Asa</publisher><dateOther>2008</dateOther><edition>4ª ed</edition><dateIssued>2008-01-01</dateIssued></originInfo><physicalDescription><extent>43, [1] p. : il. ; 21 cm</extent></physicalDescription><classification><classification ID="287999" authority="udc">087.5 BN por</classification></classification><relatedItem><relatedItem>Asa juvenil.</relatedItem></relatedItem><location><location><physicalLocation authority="BN">P. 27550 V.</physicalLocation></location><location><physicalLocation authority="BN">P. 27550 V.-D</physicalLocation></location></location><recordInfo><recordCreationDate>20091204</recordCreationDate><recordIdentifier source="Catalogo BNP">1731654</recordIdentifier><recordOrigin>PT BN RPC</recordOrigin><languageOfCataloging><languageTerm authority="iso639-2b" type="code">por</languageTerm></languageOfCataloging></recordInfo></mods></modsCollection>
+
+<!-- ============================================================ -->
+<!-- 2. PORBASE  --  urn.porbase.org, record 2237480              -->
+<!--    Same book. Note the "?A ?nuvem" title and the extra        -->
+<!--    physicalLocation from a second library (BPMP).             -->
+<!-- ============================================================ -->
+<?xml version="1.0" encoding="UTF-8"?><modsCollection xmlns="http://www.loc.gov/mods/v3" xmlns:msxsl="http://xml.apache.org/xslt" xmlns:user="http://www.mind.pt/mynamespace" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.loc.gov/mods/v3 http://www.loc.gov/standards/mods/v3/mods-3-0.xsd"><mods version="3.0"><identifier type="uri">http://id.bnportugal.gov.pt/bib/porbase/2237480</identifier><identifier type="isbn">978-972-41-2174-1</identifier><identifier type="stock">PT - 272507/08</identifier><titleInfo><title>?A ?nuvem cor-de-rosa</title></titleInfo><name><displayForm>Arsénio Mota ; il. Júlio Resende</displayForm></name><name ID="32604" type="personal"><namePart>Mota, Arsénio, 1930-</namePart><role><roleTerm type="text">creator</roleTerm></role></name><name ID="9690" type="personal"><namePart>Resende, Júlio, pseud.</namePart><description>, il.</description><role><roleTerm type="code">440</roleTerm><roleTerm type="text">contributor</roleTerm></role></name><typeOfResource>Livros</typeOfResource><language><languageTerm authority="iso639-2b" type="code">por</languageTerm><languageTerm type="text">Português</languageTerm></language><originInfo><place><placeTerm type="text">Porto</placeTerm></place><place><placeTerm authority="iso-3166" type="code">PT</placeTerm><placeTerm type="text">Portugal</placeTerm></place><publisher>Asa</publisher><dateOther>2008</dateOther><edition>4ª ed</edition><dateIssued>2008-01-01</dateIssued></originInfo><physicalDescription><extent>43, [1] p. : il. ; 21 cm</extent></physicalDescription><classification><classification ID="287999" authority="udc">087.5 BN por</classification></classification><relatedItem><relatedItem>Asa juvenil.</relatedItem></relatedItem><location><location><physicalLocation authority="BN">P. 27550 V.</physicalLocation></location><location><physicalLocation authority="BN">P. 27550 V.-D </physicalLocation></location><location><physicalLocation authority="BPMP">0LI 004722</physicalLocation></location></location><recordInfo><recordCreationDate>20091204</recordCreationDate><recordIdentifier source="Catalogo BNP">2237480</recordIdentifier><recordOrigin>PT BN RPC</recordOrigin><languageOfCataloging><languageTerm authority="iso639-2b" type="code">por</languageTerm></languageOfCataloging></recordInfo></mods></modsCollection>

@@ -22,6 +22,12 @@
 // Do not read a passing test as evidence this path works end to end; it
 // cannot be exercised end to end from a page.
 //
+// CORS is now the ONLY thing blocking this path: the URLs are right, the
+// parser is written against real captured responses (docs/urn-mods-samples.xml)
+// and the Depósito Legal scheme is known (`ndl`, see lookupByDL). Re-check any
+// of that, including whether the CORS header has appeared, with
+// scripts/probe_urn.py.
+//
 //   - openlibrary.org and covers.openlibrary.org: send
 //     `access-control-allow-origin: *`. These work directly from the
 //     browser and are the only network sources this pilot can actually
@@ -56,6 +62,14 @@ App.network = (function () {
       .replace(/[\u0088\u0089\u0098\u009C]/g, "")
       .replace(/^\?(.{1,9}?)\?/, "$1")
       .trim();
+  }
+
+  // "PT - 272507/08" -> "272507/08". Returns "" for anything that isn't a
+  // recognisable Depósito Legal, so a surprise format can't leak a bad value
+  // into the dex.
+  function extractDlFromStock(stock) {
+    const m = /(\d[\d\s]*\d)\s*\/\s*(\d{2,4})/.exec(stock || "");
+    return m ? m[1].replace(/\s+/g, "") + "/" + m[2] : "";
   }
 
   // Parses a MODS record from the BNP/PORBASE URN resolver into the same
@@ -117,13 +131,17 @@ App.network = (function () {
         pages: one("mods > physicalDescription > extent"),
         language: one("mods > language > languageTerm[type='code']"),
         isbn13: isbn13.length === 13 ? isbn13 : "",
-        // NOT mapped: <identifier type="stock">, which holds the Depósito
-        // Legal ("PT - 272507/08", confirmed against our own build — BNP
-        // record 1731654 carries deposito_legal 272507/08). Deliberately left
-        // unset: DL now drives the dex ordinal and the discovery grid, so a
-        // misread of a field whose semantics aren't formally documented would
-        // corrupt exactly the data this project is built on. Map it once BNP
-        // confirms what "stock" means. See docs/bnp-findings.md addendum §4.
+        // <identifier type="stock"> holds the Depósito Legal, prefixed with a
+        // country code: "PT - 272507/08". BNP never documents this, so it was
+        // left unmapped until the semantics were closed off empirically three
+        // ways: our own build has deposito_legal=272507/08 for record 1731654;
+        // querying /ndl/ (the DL scheme) with 272507/08 returns that record;
+        // and that record's stock reads back as PT - 272507/08. Only the
+        // NNNNNN/YY part is kept, matching build_index.py's normalize_dl and
+        // what the app stores everywhere else. Anything not of that shape is
+        // dropped rather than guessed at — DL drives the dex ordinal and the
+        // discovery grid, so a wrong value here corrupts the core data.
+        deposito_legal: extractDlFromStock(one("mods > identifier[type='stock']")),
         source: source,
       };
     } catch (err) {
@@ -137,8 +155,12 @@ App.network = (function () {
   // omitting them yields "Pedido inválido - não contém forma", not a record.
   // ISBNs may be passed unhyphenated (verified), so no hyphenation step and
   // no ISBN registrant-range tables are needed.
+  function urnUrl(host, scheme, value) {
+    return `https://${host}/${scheme}/mods/xml?id=${encodeURIComponent(value)}`;
+  }
+
   function urnIsbnUrl(host, isbn) {
-    return `https://${host}/isbn/mods/xml?id=${encodeURIComponent(isbn)}`;
+    return urnUrl(host, "isbn", isbn);
   }
 
   async function fetchFromBNP(isbn) {
@@ -202,27 +224,39 @@ App.network = (function () {
     return edition;
   }
 
-  // DL-keyed network lookup: NOT IMPLEMENTED, and deliberately not guessed at.
+  // DL-keyed lookup. Only BNP/PORBASE can answer it — OpenLibrary has no
+  // concept of Depósito Legal.
   //
-  // Only BNP/PORBASE could answer it — OpenLibrary has no concept of Depósito
-  // Legal. BNP's acesso.urn docs do list Legal Deposit Number as a supported
-  // identifier space, but the scheme name it goes by is undocumented and none
-  // of the plausible ones resolve: /dl/, /depositolegal/ and /stock/ all 404
-  // against /{scheme}/mods/xml?id= (tested 2026-08-31). The previous code
-  // shipped `/dl/{value}`, which was wrong twice over — wrong scheme name AND
-  // the old formaless URL shape.
+  // The scheme is `ndl` (número de depósito legal), found by probing
+  // (scripts/probe_urn.py) after BNP's docs named Legal Deposit Number as a
+  // supported identifier space without saying what to call it; /dl/,
+  // /depositolegal/ and /stock/ all 404. The previous code shipped
+  // `/dl/{value}`, wrong twice over — wrong scheme AND the old formaless URL.
   //
-  // Returning null outright rather than firing a request known to 404: a
-  // request that cannot succeed is not a fallback, it's a slow no. Asking BNP
-  // for the scheme name is a pending item — see docs/bnp-findings.md addendum
-  // §4 and §7. Note DL *is* present in the response as
-  // <identifier type="stock">, so this is an input-side gap only.
-  //
-  // The cache read is kept so that anything cached by an older build, or by a
-  // future working implementation, still resolves.
+  // This is the lookup that matters most to this project, because it is the
+  // one ISBN cannot do. Verified directly against BNP: ?id=272507/08 returns
+  // record 1731654 (4ª ed) and ?id=308831/10 returns record 1783350 (6ª ed) —
+  // two printings that share ISBN 9789724121741 and which an ISBN query can
+  // only return arbitrarily. Still CORS-blocked from a browser like the rest
+  // of this path, so it does not yet run in the app.
   async function lookupByDL(dl) {
-    const cached = await App.idb.cacheGet(`dl:${dl}`);
-    return cached ? cached.edition : null;
+    const cacheKey = `dl:${dl}`;
+    const cached = await App.idb.cacheGet(cacheKey);
+    if (cached) return cached.edition;
+
+    let edition = null;
+    for (const host of ["urn.bnportugal.gov.pt", "urn.porbase.org"]) {
+      const res = await tryFetch(urnUrl(host, "ndl", dl));
+      if (!res) continue;
+      edition = parseUrnXml(
+        await res.text(),
+        host === "urn.porbase.org" ? "porbase-urn" : "bnp-urn"
+      );
+      if (edition) break;
+    }
+
+    if (edition) await App.idb.cachePut(cacheKey, edition, edition.source);
+    return edition;
   }
 
   // Rung 4: network-only fuzzy title/author search (local FTS was dropped,
